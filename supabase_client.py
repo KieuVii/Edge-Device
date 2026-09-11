@@ -551,6 +551,25 @@ def set_command_status(command_id, status, message=None):
     return _update_command_status(command_id, fields)
 
 
+def cancel_other_restarts(command_id):
+    """Huy cac lenh restart_service pending khac cua cung device.
+    Tranh tinh trang Pi restart lien tuc do nhieu lenh restart con sot
+    (click nhieu lan khi Pi dang down / frontend gui lap)."""
+    if not enabled() or not _device_id:
+        return
+    try:
+        _client().table("device_commands").update(
+            {
+                "status": "cancelled",
+                "result_message": "Da co lenh restart khac duoc xu ly truoc",
+                "executed_at": _now_iso(),
+            },
+            returning="minimal",
+        ).eq("device_id", _device_id).eq("command", "restart_service").eq("status", "pending").neq("id", command_id).execute()
+    except Exception as exc:
+        print(">> [Supabase] cancel_other_restarts loi:", str(exc)[:150])
+
+
 def recover_stale_commands():
     """Khoi dong lai: moi lenh 'running' con sot (Pi chet giua chung) -> failed, khong bao gio ket."""
     if not enabled() or not _device_id:

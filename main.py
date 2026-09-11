@@ -230,6 +230,7 @@ def handle_command(cmd):
             cap = open_camera()
             ok, msg = run_verification(access_type, cap)
         elif ctype == "restart_service":
+            sb.cancel_other_restarts(cmd_id)
             ok = True
             restart_requested = True
             msg = "Service dang khoi dong lai..."
