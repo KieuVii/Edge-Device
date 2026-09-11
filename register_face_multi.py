@@ -3,6 +3,7 @@ import numpy as np
 import time
 import spidev
 import os
+import sys
 from gpiozero import OutputDevice
 
 import supabase_client as sb
@@ -93,8 +94,19 @@ MIN_FACE_SIZE = 60
 BLUR_MIN_VAR = 25.0
 POSE_NAMES = ["NHIN THANG", "NGHIENG TRAI", "NGHIENG PHAI"]
 
+def read_name(prompt):
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    raw = sys.stdin.buffer.readline().rstrip(b"\r\n")
+    for enc in ("utf-8", "cp1258", "latin-1"):
+        try:
+            return raw.decode(enc).strip()
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("latin-1", errors="replace").strip()
+
 # Nhập tên trước trên terminal
-new_name = input("Nhập tên người cần đăng ký (khớp face_name trên Supabase): ").strip()
+new_name = read_name("Nhập tên người cần đăng ký (khớp face_name trên Supabase): ")
 if not new_name:
     print("Tên không hợp lệ!")
     exit(1)
