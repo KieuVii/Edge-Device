@@ -399,12 +399,13 @@ def save_capture(frame, label=""):
 
 
 def record_access(result, similarity=None, face_name=None, face_profile=None,
-                  threshold=0.32, note="", alert=None, local_image=None):
+                  threshold=0.32, note="", alert=None, local_image=None, access_type=None):
     if not enabled():
         if DRY_RUN:
             print("[DRY-RUN] access_logs:", json.dumps({
                 "device_code": DEVICE_CODE, "face_name": face_name, "result": result,
                 "similarity": similarity, "threshold": threshold, "note": note,
+                "access_type": access_type,
             }, ensure_ascii=False, default=str))
             if alert:
                 print("[DRY-RUN] alerts:", json.dumps(alert, ensure_ascii=False, default=str))
@@ -418,6 +419,8 @@ def record_access(result, similarity=None, face_name=None, face_profile=None,
         "threshold": threshold,
         "note": note,
     }
+    if access_type:
+        payload["access_type"] = access_type
     if face_profile:
         payload["user_id"] = face_profile.get("user_id")
         payload["face_profile_id"] = face_profile.get("face_profile_id")
@@ -487,7 +490,7 @@ def mark_face_registered(face_name, sample_count=10):
         return "error"
 
 
-def fetch_pending_register_command():
+def fetch_pending_command():
     if not enabled() or not _device_id:
         return None
     try:
@@ -496,7 +499,6 @@ def fetch_pending_register_command():
             .table("device_commands")
             .select("id, command, payload, status")
             .eq("device_id", _device_id)
-            .eq("command", "start_register_face")
             .eq("status", "pending")
             .order("requested_at")
             .limit(1)
@@ -505,7 +507,7 @@ def fetch_pending_register_command():
         rows = _resp_rows(resp)
         return rows[0] if rows else None
     except Exception as exc:
-        print(">> [Supabase] fetch_pending_register_command loi:", str(exc)[:150])
+        print(">> [Supabase] fetch_pending_command loi:", str(exc)[:150])
         return None
 
 
