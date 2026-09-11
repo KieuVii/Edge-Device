@@ -485,3 +485,41 @@ def mark_face_registered(face_name, sample_count=10):
             return "queued"
         print(">> [Supabase] mark_face_registered loi:", str(exc)[:150])
         return "error"
+
+
+def fetch_pending_register_command():
+    if not enabled() or not _device_id:
+        return None
+    try:
+        resp = (
+            _client()
+            .table("device_commands")
+            .select("id, command, payload, status")
+            .eq("device_id", _device_id)
+            .eq("command", "start_register_face")
+            .eq("status", "pending")
+            .order("requested_at")
+            .limit(1)
+            .execute()
+        )
+        rows = _resp_rows(resp)
+        return rows[0] if rows else None
+    except Exception as exc:
+        print(">> [Supabase] fetch_pending_register_command loi:", str(exc)[:150])
+        return None
+
+
+def set_command_status(command_id, status, message=None):
+    if not enabled():
+        return False
+    fields = {"status": status}
+    if message:
+        fields["result_message"] = str(message)[:500]
+    if status in ("done", "failed", "cancelled"):
+        fields["executed_at"] = _now_iso()
+    try:
+        _client().table("device_commands").update(fields, returning="minimal").eq("id", command_id).execute()
+        return True
+    except Exception as exc:
+        print(">> [Supabase] set_command_status loi:", str(exc)[:150])
+        return False

@@ -1,58 +1,17 @@
+import os
+import time
+from threading import Thread
+
 import cv2
 import numpy as np
-import time
-import spidev
-from threading import Thread
 from gpiozero import OutputDevice
 
 import supabase_client as sb
-
-# 1. Phan cung
-DC_PIN = OutputDevice(24)       # Pin 18 (GPIO 24)
-RST_PIN = OutputDevice(25)      # Pin 22 (GPIO 25)
-RST_PIN.on()                    # Giu chan RESET luon o 3.3V de man hinh chay binh thuong
+import tft_ui
+import registration
 
 # Relay kich muc CAO: Mac dinh tat (0V)
 RELAY_PIN = OutputDevice(23, active_high=True, initial_value=False)
-
-spi = spidev.SpiDev()
-spi.open(0, 0)
-spi.max_speed_hz = 24000000
-spi.mode = 0
-
-def send_cmd(cmd):
-    DC_PIN.off()
-    spi.writebytes([cmd])
-
-def send_data(data):
-    DC_PIN.on()
-    if isinstance(data, int):
-        spi.writebytes([data])
-    elif isinstance(data, list):
-        spi.writebytes(data)
-    else:
-        for i in range(0, len(data), 4096):
-            spi.writebytes2(data[i:i+4096])
-
-def init_tft():
-    send_cmd(0x01); time.sleep(0.12)
-    send_cmd(0x11); time.sleep(0.12)
-    send_cmd(0x3A); send_data(0x55)
-    send_cmd(0x36); send_data(0x70)
-    send_cmd(0x20) # Inversion OFF
-    
-    send_cmd(0xB2); send_data([0x0C, 0x0C, 0x00, 0x33, 0x33])
-    send_cmd(0xB7); send_data(0x35)
-    send_cmd(0xBB); send_data(0x19)
-    send_cmd(0xC0); send_data(0x2C)
-    send_cmd(0xC2); send_data(0x01)
-    send_cmd(0xC3); send_data(0x12)
-    send_cmd(0xC4); send_data(0x20)
-    send_cmd(0xC6); send_data(0x0F)
-    
-    send_cmd(0x29); time.sleep(0.05)
-    send_cmd(0x2A); send_data([0x00, 0x00, 0x01, 0x3F])
-    send_cmd(0x2B); send_data([0x00, 0x00, 0x00, 0xEF])
 
 # 2. Khoi tao AI Model
 cv2.setNumThreads(4)
@@ -103,6 +62,29 @@ def sync_face_db():
             del face_db[k]
         np.save("face_db.npy", face_db)
         print(">> [Sync] Da xoa template khong con tren Supabase:", stale)
+
+
+def handle_register_command(cap):
+    global face_db
+    cmd = sb.fetch_pending_register_command()
+    if cmd is None:
+        return False
+    cmd_id = cmd["id"]
+    face_name = (cmd.get("payload") or {}).get("face_name")
+    if not face_name:
+        sb.set_command_status(cmd_id, "failed", message="Thieu face_name trong payload")
+        return True
+
+    sb.set_command_status(cmd_id, "running")
+    print(f">> [Lenh] Nhan lenh dang ky khuon mat: {face_name}")
+    ok, msg = registration.run_registration(face_name, cap=cap)
+    sb.set_command_status(cmd_id, "done" if ok else "failed", message=msg)
+    print(f">> [Lenh] Ket qua dang ky: {'OK' if ok else 'THAT BAI'} - {msg}")
+
+    face_db = np.load("face_db.npy", allow_pickle=True).item() if os.path.exists("face_db.npy") else {}
+    sb.load_face_profiles()
+    sync_face_db()
+    return True
 
 def verify_face_worker(frame_input):
     global system_status, status_hold_time, is_verifying, active_face_box
@@ -212,7 +194,7 @@ def verify_face_worker(frame_input):
 # 4. Luong chinh
 def main():
     global system_status, is_verifying, active_face_box
-    init_tft()
+    tft_ui.init_tft()
 
     sb.start_worker()
     sb.ensure_device()
@@ -227,6 +209,7 @@ def main():
     last_trigger_time = 0
     last_heartbeat = 0
     last_profile_sync = 0
+    last_cmd_check = 0
     prev_time = time.time()
 
     print(">> HE THONG ACCESS CONTROL DA HOAT DONG HOAN TOAN TREN TFT!")
@@ -281,6 +264,12 @@ def main():
                 sync_face_db()
                 last_profile_sync = current_time
 
+            # Nhan lenh dang ky khuon mat tu web app (device_commands)
+            if current_time - last_cmd_check >= 5:
+                if handle_register_command(cap):
+                    last_trigger_time = current_time
+                last_cmd_check = current_time
+
             # Chon mau giao dien
             if "WELCOME" in system_status:
                 color = (0, 255, 0)      # Xanh la
@@ -302,22 +291,13 @@ def main():
             cv2.putText(frame, f"{fps:.1f} FPS", (250, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
 
             # Day frame len TFT
-            frame_u16 = frame.astype(np.uint16)
-            b = frame_u16[:, :, 0] >> 3
-            g = frame_u16[:, :, 1] >> 2
-            r = frame_u16[:, :, 2] >> 3
-            rgb565 = (r << 11) | (g << 5) | b
-
-            send_cmd(0x2C)
-            send_data(rgb565.byteswap().tobytes())
+            tft_ui.render_tft(frame)
 
     except KeyboardInterrupt:
         print("\n>> Dung he thong.")
     finally:
         cap.release()
-        spi.close()
-        DC_PIN.close()
-        RST_PIN.close()
+        tft_ui.close()
         RELAY_PIN.close()
         sb.set_device_offline()
         sb.stop_worker(timeout=6)

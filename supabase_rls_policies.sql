@@ -18,3 +18,8 @@ create policy "alerts_select_anon" on alerts for select to anon using (true);
 -- face_profiles: register tool doc (tim face_name) + cap nhat status
 create policy "face_profiles_select_anon" on face_profiles for select to anon using (true);
 create policy "face_profiles_update_anon" on face_profiles for update to anon using (true);
+
+-- device_commands: Python (anon) poll lenh start_register_face + cap nhat trang thai;
+-- frontend (authenticated, admin) insert da co trong schema.sql (device_commands_admin_all)
+create policy "device_commands_select_anon" on device_commands for select to anon using (true);
+create policy "device_commands_update_anon" on device_commands for update to anon using (true);
