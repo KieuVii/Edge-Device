@@ -1,0 +1,7 @@
+opencv-python
+numpy
+spidev
+gpiozero
+supabase
+python-dotenv
+python-multipart

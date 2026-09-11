@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Face Access - User Management</title>
+<style>
+:root{
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --text:#1e293b;
+  --muted:#64748b;
+  --line:#e2e8f0;
+  --blue:#2563eb;
+  --blue2:#eff6ff;
+  --green:#16a34a;
+  --green2:#f0fdf4;
+  --red:#dc2626;
+  --red2:#fef2f2;
+  --amber:#d97706;
+  --amber2:#fffbeb;
+  --shadow:0 8px 24px rgba(15,23,42,.06);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,Helvetica,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.sidebar{
+  background:#fff;
+  border-right:1px solid var(--line);
+  padding:22px 16px;
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;margin-bottom:28px}
+.brand-badge{
+  width:36px;height:36px;border-radius:10px;background:var(--blue);
+  display:grid;place-items:center;color:white;font-weight:800;
+}
+.nav a{
+  display:flex;align-items:center;gap:10px;
+  text-decoration:none;color:#475569;
+  padding:11px 12px;border-radius:10px;margin-bottom:6px;font-size:14px;
+}
+.nav a.active{background:var(--blue2);color:var(--blue);font-weight:700}
+.nav a:hover{background:#f8fafc}
+.main{padding:26px}
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px;
+}
+.topbar h1{font-size:25px;margin:0}
+.topbar p{margin:5px 0 0;color:var(--muted);font-size:14px}
+.btn{
+  border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:700;
+}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-light{background:#fff;color:var(--text);border:1px solid var(--line)}
+.btn-danger{background:var(--red2);color:var(--red)}
+.cards{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px;
+}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px;box-shadow:var(--shadow);
+}
+.kpi-label{color:var(--muted);font-size:13px}
+.kpi{font-size:28px;font-weight:800;margin-top:8px}
+.grid{
+  display:grid;grid-template-columns:minmax(0,1.8fr) minmax(320px,.9fr);gap:18px;
+}
+.panel{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+}
+.panel-head{
+  padding:16px;border-bottom:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+}
+.panel-head h2{font-size:16px;margin:0}
+.search{
+  width:270px;max-width:100%;
+  border:1px solid var(--line);border-radius:9px;padding:9px 11px;outline:none;
+}
+.search:focus{border-color:var(--blue)}
+.table-wrap{overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:800px}
+th,td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+th{color:var(--muted);font-size:12px;background:#f8fafc}
+.usercell{display:flex;align-items:center;gap:10px}
+.avatar{
+  width:38px;height:38px;border-radius:10px;object-fit:cover;background:#e2e8f0;
+  display:grid;place-items:center;font-weight:700;color:#475569;overflow:hidden;
+}
+.badge{display:inline-block;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:700}
+.ok{background:var(--green2);color:var(--green)}
+.off{background:var(--red2);color:var(--red)}
+.wait{background:var(--amber2);color:var(--amber)}
+.actions button{
+  border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px;
+}
+.log-list{padding:8px 16px 16px}
+.log{
+  padding:12px 0;border-bottom:1px solid var(--line);
+  display:grid;grid-template-columns:10px 1fr;gap:10px;
+}
+.dot{width:8px;height:8px;border-radius:50%;margin-top:5px}
+.dot.green{background:var(--green)} .dot.red{background:var(--red)}
+.log b{font-size:13px}
+.log p{font-size:12px;color:var(--muted);margin:4px 0 0}
+.empty{padding:26px;text-align:center;color:var(--muted);font-size:13px}
+.modal{
+  position:fixed;inset:0;background:rgba(15,23,42,.45);
+  display:none;align-items:center;justify-content:center;padding:16px;z-index:99;
+}
+.modal.show{display:flex}
+.dialog{
+  width:560px;max-width:100%;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(15,23,42,.25);
+}
+.dialog-head{display:flex;justify-content:space-between;align-items:center;padding:18px;border-bottom:1px solid var(--line)}
+.dialog-head h3{margin:0}
+.close{border:0;background:transparent;font-size:22px;cursor:pointer}
+.form{padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1/-1}
+label{font-size:12px;color:var(--muted);font-weight:700}
+input,select{
+  border:1px solid var(--line);border-radius:9px;padding:10px 11px;outline:none;
+}
+input:focus,select:focus{border-color:var(--blue)}
+.preview{
+  display:flex;align-items:center;gap:12px;padding:10px;border:1px dashed var(--line);border-radius:10px;
+}
+.preview img{width:64px;height:64px;border-radius:12px;object-fit:cover;background:#e2e8f0}
+.dialog-foot{padding:14px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.note{
+  margin-top:16px;padding:12px 14px;background:var(--blue2);color:#1e40af;border-radius:10px;font-size:12px;
+}
+@media(max-width:1050px){
+  .cards{grid-template-columns:repeat(2,1fr)}
+  .grid{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .app{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .main{padding:16px}
+  .cards{grid-template-columns:1fr 1fr}
+  .topbar{align-items:flex-start}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-badge">FA</div> FACE ACCESS</div>
+    <nav class="nav">
+      <a href="#">⌂ Dashboard</a>
+      <a class="active" href="#">👤 Quản lý người dùng</a>
+      <a href="#">🕒 Lịch sử ra/vào</a>
+      <a href="#">▣ Thiết bị</a>
+      <a href="#">⚙ Cài đặt</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1>Quản lý người dùng</h1>
+        <p>Lưu thông tin người được phép truy cập hệ thống nhận diện khuôn mặt.</p>
+      </div>
+      <button class="btn btn-primary" onclick="openAdd()">+ Thêm người dùng</button>
+    </div>
+
+    <section class="cards">
+      <div class="card"><div class="kpi-label">Tổng người dùng</div><div class="kpi" id="kpiTotal">0</div></div>
+      <div class="card"><div class="kpi-label">Được phép truy cập</div><div class="kpi" id="kpiActive">0</div></div>
+      <div class="card"><div class="kpi-label">Đã đăng ký khuôn mặt</div><div class="kpi" id="kpiFace">0</div></div>
+      <div class="card"><div class="kpi-label">Sự kiện hôm nay</div><div class="kpi" id="kpiToday">0</div></div>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Danh sách người dùng</h2>
+          <input class="search" id="search" placeholder="Tìm theo tên, ID, phòng ban..." oninput="renderUsers()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Người dùng</th>
+                <th>ID</th>
+                <th>Phòng ban / lớp</th>
+                <th>Quyền truy cập</th>
+                <th>Khuôn mặt</th>
+                <th>Lần cập nhật</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="userBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-head"><h2>Nhật ký truy cập gần đây</h2></div>
+        <div class="log-list" id="logList"></div>
+      </aside>
+    </div>
+
+    <div class="note">
+      Bản demo này lưu dữ liệu quản lý người dùng bằng <b>localStorage</b> trên trình duyệt. 
+      Khi làm hệ thống thật, bạn nên lưu thông tin người dùng và lịch sử vào database; dữ liệu đặc trưng khuôn mặt/vector nên nằm ở thiết bị Edge thay vì lưu trực tiếp trên trình duyệt.
+    </div>
+  </main>
+</div>
+
+<div class="modal" id="modal">
+  <div class="dialog">
+    <div class="dialog-head">
+      <h3 id="modalTitle">Thêm người dùng</h3>
+      <button class="close" onclick="closeModal()">×</button>
+    </div>
+
+    <form id="userForm" onsubmit="saveUser(event)">
+      <div class="form">
+        <input type="hidden" id="editIndex">
+
+        <div class="field">
+          <label>Mã người dùng *</label>
+          <input id="uid" required placeholder="VD: SV001">
+        </div>
+
+        <div class="field">
+          <label>Họ và tên *</label>
+          <input id="name" required placeholder="Nguyễn Văn A">
+        </div>
+
+        <div class="field">
+          <label>Phòng ban / Lớp</label>
+          <input id="department" placeholder="VD: IoT - Nhóm 6">
+        </div>
+
+        <div class="field">
+          <label>Vai trò</label>
+          <select id="role">
+            <option>Sinh viên</option>
+            <option>Giảng viên</option>
+            <option>Nhân viên</option>
+            <option>Quản trị viên</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Quyền truy cập</label>
+          <select id="access">
+            <option value="active">Cho phép</option>
+            <option value="blocked">Khóa</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Trạng thái đăng ký khuôn mặt</label>
+          <select id="face">
+            <option value="registered">Đã đăng ký</option>
+            <option value="pending">Chưa đăng ký</option>
+          </select>
+        </div>
+
+        <div class="field full">
+          <label>Ảnh đại diện</label>
+          <div class="preview">
+            <img id="photoPreview" alt="">
+            <div style="flex:1">
+              <input id="photo" type="file" accept="image/*" onchange="previewPhoto(event)">
+              <div style="font-size:11px;color:#64748b;margin-top:5px">Chỉ dùng ảnh nhỏ trong bản demo.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label>Ghi chú</label>
+          <input id="note" placeholder="VD: Chỉ được truy cập phòng Lab A">
+        </div>
+      </div>
+
+      <div class="dialog-foot">
+        <button type="button" class="btn btn-light" onclick="closeModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Lưu thông tin</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const KEY_USERS = "face_access_users_v1";
+const KEY_LOGS = "face_access_logs_v1";
+
+const defaultUsers = [
+  {uid:"ID001",name:"T. Nguyễn",department:"Team 3 - SIC 2026",role:"Sinh viên",access:"active",face:"registered",photo:"",note:"",updated:"31/08/2026 14:10"},
+  {uid:"ID002",name:"L. Phạm",department:"Team 3 - SIC 2026",role:"Sinh viên",access:"active",face:"registered",photo:"",note:"",updated:"31/08/2026 13:42"},
+  {uid:"ID003",name:"N. Trần",department:"Khách",role:"Nhân viên",access:"blocked",face:"pending",photo:"",note:"",updated:"30/08/2026 20:15"}
+];
+
+const defaultLogs = [
+  {name:"T. Nguyễn",time:"10:05:01",result:"Access Granted",ok:true},
+  {name:"L. Phạm",time:"09:58:33",result:"Access Granted",ok:true},
+  {name:"Unknown",time:"09:43:12",result:"Denied",ok:false},
+  {name:"T. Nguyễn",time:"08:20:17",result:"Access Granted",ok:true}
+];
+
+function getUsers(){
+  const x = localStorage.getItem(KEY_USERS);
+  if(!x){ localStorage.setItem(KEY_USERS, JSON.stringify(defaultUsers)); return defaultUsers; }
+  return JSON.parse(x);
+}
+function setUsers(users){ localStorage.setItem(KEY_USERS, JSON.stringify(users)); }
+function getLogs(){
+  const x = localStorage.getItem(KEY_LOGS);
+  if(!x){ localStorage.setItem(KEY_LOGS, JSON.stringify(defaultLogs)); return defaultLogs; }
+  return JSON.parse(x);
+}
+
+function initials(name){
+  return name.split(" ").filter(Boolean).slice(-2).map(x=>x[0]?.toUpperCase()).join("");
+}
+function avatarHTML(u){
+  if(u.photo) return `<img class="avatar" src="${u.photo}" alt="">`;
+  return `<div class="avatar">${initials(u.name)}</div>`;
+}
+function badgeAccess(v){
+  return v==="active" ? `<span class="badge ok">Cho phép</span>` : `<span class="badge off">Đã khóa</span>`;
+}
+function badgeFace(v){
+  return v==="registered" ? `<span class="badge ok">Đã đăng ký</span>` : `<span class="badge wait">Chưa đăng ký</span>`;
+}
+
+function renderUsers(){
+  const users = getUsers();
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const body = document.getElementById("userBody");
+  body.innerHTML = "";
+  users.forEach((u,i)=>{
+    const hay = `${u.uid} ${u.name} ${u.department} ${u.role}`.toLowerCase();
+    if(q && !hay.includes(q)) return;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><div class="usercell">${avatarHTML(u)}<div><b>${u.name}</b><div style="font-size:11px;color:#64748b">${u.role}</div></div></div></td>
+      <td>${u.uid}</td>
+      <td>${u.department || "-"}</td>
+      <td>${badgeAccess(u.access)}</td>
+      <td>${badgeFace(u.face)}</td>
+      <td>${u.updated || "-"}</td>
+      <td class="actions">
+        <button onclick="editUser(${i})">Sửa</button>
+        <button onclick="deleteUser(${i})">Xóa</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+  renderKPI();
+}
+function renderKPI(){
+  const users = getUsers();
+  document.getElementById("kpiTotal").textContent = users.length;
+  document.getElementById("kpiActive").textContent = users.filter(x=>x.access==="active").length;
+  document.getElementById("kpiFace").textContent = users.filter(x=>x.face==="registered").length;
+  document.getElementById("kpiToday").textContent = getLogs().length;
+}
+function renderLogs(){
+  const logs = getLogs();
+  const box = document.getElementById("logList");
+  if(!logs.length){ box.innerHTML = `<div class="empty">Chưa có dữ liệu.</div>`; return; }
+  box.innerHTML = logs.slice(0,8).map(x=>`
+    <div class="log">
+      <div class="dot ${x.ok?"green":"red"}"></div>
+      <div><b>${x.time} · ${x.name}</b><p>${x.result}</p></div>
+    </div>`).join("");
+}
+
+let photoData = "";
+function openAdd(){
+  document.getElementById("userForm").reset();
+  document.getElementById("editIndex").value = "";
+  document.getElementById("modalTitle").textContent = "Thêm người dùng";
+  document.getElementById("photoPreview").src = "";
+  photoData = "";
+  document.getElementById("modal").classList.add("show");
+}
+function closeModal(){ document.getElementById("modal").classList.remove("show"); }
+
+function previewPhoto(e){
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    photoData = ev.target.result;
+    document.getElementById("photoPreview").src = photoData;
+  };
+  reader.readAsDataURL(f);
+}
+
+function editUser(i){
+  const u = getUsers()[i];
+  document.getElementById("editIndex").value = i;
+  document.getElementById("uid").value = u.uid;
+  document.getElementById("name").value = u.name;
+  document.getElementById("department").value = u.department || "";
+  document.getElementById("role").value = u.role;
+  document.getElementById("access").value = u.access;
+  document.getElementById("face").value = u.face;
+  document.getElementById("note").value = u.note || "";
+  photoData = u.photo || "";
+  document.getElementById("photoPreview").src = photoData;
+  document.getElementById("modalTitle").textContent = "Chỉnh sửa người dùng";
+  document.getElementById("modal").classList.add("show");
+}
+
+function deleteUser(i){
+  if(!confirm("Bạn có chắc muốn xóa người dùng này?")) return;
+  const users = getUsers();
+  users.splice(i,1);
+  setUsers(users);
+  renderUsers();
+}
+
+function nowText(){
+  const d = new Date();
+  return d.toLocaleDateString("vi-VN") + " " + d.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"});
+}
+function saveUser(e){
+  e.preventDefault();
+  const users = getUsers();
+  const idx = document.getElementById("editIndex").value;
+  const data = {
+    uid: document.getElementById("uid").value.trim(),
+    name: document.getElementById("name").value.trim(),
+    department: document.getElementById("department").value.trim(),
+    role: document.getElementById("role").value,
+    access: document.getElementById("access").value,
+    face: document.getElementById("face").value,
+    photo: photoData,
+    note: document.getElementById("note").value.trim(),
+    updated: nowText()
+  };
+  const duplicate = users.findIndex((u,j)=>u.uid.toLowerCase()===data.uid.toLowerCase() && String(j)!==String(idx));
+  if(duplicate>=0){ alert("Mã người dùng đã tồn tại."); return; }
+
+  if(idx==="") users.push(data);
+  else users[Number(idx)] = data;
+
+  setUsers(users);
+  closeModal();
+  renderUsers();
+}
+
+document.getElementById("modal").addEventListener("click", e=>{
+  if(e.target.id==="modal") closeModal();
+});
+
+renderUsers();
+renderLogs();
+</script>
+</body>
+</html>

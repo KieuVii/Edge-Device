@@ -1,0 +1,6 @@
+.env
+captures/
+pending_ops.db
+face_db.npy
+__pycache__/
+*.pyc
