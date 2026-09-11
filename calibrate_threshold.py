@@ -100,7 +100,12 @@ def collect(group, count):
         if bw < MIN_FACE_SIZE or bh < MIN_FACE_SIZE:
             time.sleep(0.05)
             continue
-        face_gray = cv2.cvtColor(frame[box[1]:box[1] + bh, box[0]:box[0] + bw], cv2.COLOR_BGR2GRAY)
+        x0, y0 = max(0, box[0]), max(0, box[1])
+        x1, y1 = min(320, box[0] + bw), min(240, box[1] + bh)
+        if x1 - x0 < MIN_FACE_SIZE or y1 - y0 < MIN_FACE_SIZE:
+            time.sleep(0.05)
+            continue
+        face_gray = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
         if cv2.Laplacian(face_gray, cv2.CV_64F).var() < BLUR_MIN_VAR:
             time.sleep(0.05)
             continue

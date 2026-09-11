@@ -218,18 +218,25 @@ try:
                 cv2.rectangle(disp, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
 
                 if bw >= MIN_FACE_SIZE and bh >= MIN_FACE_SIZE:
-                    face_gray = cv2.cvtColor(frame[by:by + bh, bx:bx + bw], cv2.COLOR_BGR2GRAY)
-                    sharpness = cv2.Laplacian(face_gray, cv2.CV_64F).var()
-                    if sharpness >= BLUR_MIN_VAR:
-                        aligned = recognizer.alignCrop(frame, face)
-                        feat = recognizer.feature(aligned)
-                        pose_samples.append(feat)
-                        msg = f"{pose_name}: {len(pose_samples)}/{SAMPLES_PER_POSE}"
-                        color = (0, 255, 255)
-                        time.sleep(0.15)
-                    else:
-                        msg = "DO BI MO - GIU YEN"
+                    x0, y0 = max(0, bx), max(0, by)
+                    x1, y1 = min(320, bx + bw), min(240, by + bh)
+                    face_crop = frame[y0:y1, x0:x1]
+                    if x1 - x0 < MIN_FACE_SIZE or y1 - y0 < MIN_FACE_SIZE:
+                        msg = "CANH CHINH KHUON MAT"
                         color = (0, 0, 255)
+                    else:
+                        face_gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+                        sharpness = cv2.Laplacian(face_gray, cv2.CV_64F).var()
+                        if sharpness >= BLUR_MIN_VAR:
+                            aligned = recognizer.alignCrop(frame, face)
+                            feat = recognizer.feature(aligned)
+                            pose_samples.append(feat)
+                            msg = f"{pose_name}: {len(pose_samples)}/{SAMPLES_PER_POSE}"
+                            color = (0, 255, 255)
+                            time.sleep(0.15)
+                        else:
+                            msg = "DO BI MO - GIU YEN"
+                            color = (0, 0, 255)
                 else:
                     msg = "DEN GAN HON"
                     color = (0, 0, 255)
