@@ -1,0 +1,15 @@
+[Unit]
+Description=SmartLock Face Access
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/home/pizero2w/edge-device/Edge-Device/venv/bin/python /home/pizero2w/edge-device/Edge-Device/main.py
+WorkingDirectory=/home/pizero2w/edge-device/Edge-Device
+Restart=always
+RestartSec=5
+User=pizero2w
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

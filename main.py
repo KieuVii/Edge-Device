@@ -1,4 +1,6 @@
 import os
+import signal
+import sys
 import time
 from threading import Thread
 
@@ -9,6 +11,10 @@ from gpiozero import OutputDevice
 import supabase_client as sb
 import tft_ui
 import registration
+
+# Khi systemd gui SIGTERM (systemctl stop / reboot): thoat sach de finally chay
+# (set device offline + flush queue) thay vi bi kill cung.
+signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 
 # Relay kich muc CAO: Mac dinh tat (0V)
 RELAY_PIN = OutputDevice(23, active_high=True, initial_value=False)
