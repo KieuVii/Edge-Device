@@ -7,8 +7,10 @@ SmartLock edge device: Raspberry Pi face-recognition door lock (TFT ILI9341 + ca
 - This folder IS a git repo (origin `github.com/KieuVii/Edge-Device.git`) -- the Pi clones from it (`~/edge-device/Edge-Device`), so commit + push, then `git pull` on the Pi.
 
 ## What runs where
-- `main.py` / `register_face_multi.py` / `calibrate_threshold.py` are Raspberry Pi-only: `main.py` and `register_face_multi.py` import `spidev`, `gpiozero` and open GPIO 24/25/23 + SPI0.0 at module level -- importing them on the dev PC crashes. Do not run them locally. `calibrate_threshold.py` only touches camera + ONNX (no GPIO) but still needs the Pi's `/dev/video0`.
+- `main.py` / `register_face_multi.py` / `registration.py` / `tft_ui.py` / `calibrate_threshold.py` are Raspberry Pi-only: `tft_ui.py` opens GPIO 24/25 + SPI0.0 at module level, and `main.py` also opens GPIO23 (relay) -- importing them on the dev PC crashes. Do not run them locally. `calibrate_threshold.py` only touches camera + ONNX (no GPIO) but still needs the Pi's `/dev/video0`.
 - `supabase_client.py` is cross-platform and is the only module testable on the dev PC.
+- `tft_ui.py` = shared TFT ILI9341 driver (init/render/show_message/render_capture) used by both `main.py` and `registration.py` -- do not fork the TFT code per-script.
+- `registration.py` = shared 3-pose capture flow, `run_registration(name, cap=None) -> (ok, message)` with a 60s timeout per pose. Used by `register_face_multi.py` (interactive CLI, name via argv or stdin prompt) and by `main.py` for remote triggers.
 
 ## Runtime prerequisites (not in repo)
 - ONNX models are loaded from the **current working directory**: `face_detection_yunet_2023mar.onnx`, `face_recognition_sface_2021dec.onnx`. They must exist beside the scripts on the Pi (systemd unit uses `WorkingDirectory=/home/pi/fina`).
@@ -18,7 +20,7 @@ SmartLock edge device: Raspberry Pi face-recognition door lock (TFT ILI9341 + ca
 ## Supabase config (`.env` next to supabase_client.py)
 - Keys: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `DEVICE_CODE` (=`DOOR_01`), `DEVICE_NAME`, optional `DEVICE_IP`/`ROOM_UUID`, `DRY_RUN`.
 - `.env` has a built-in fallback parser (works without python-dotenv). Missing config => runs WITHOUT sync (recognition/door still work, logs just not sent). `DRY_RUN=1` prints payloads, sends nothing.
-- The key is currently a **publishable key = anon role**, so the RLS policies in `supabase_rls_policies.sql` must exist: devices (select/insert/update), access_logs (select/insert), alerts (select/insert), face_profiles (select/update). There is **no anon insert on face_profiles** -- profiles are created from the web app.
+- The key is currently a **publishable key = anon role**, so the RLS policies in `supabase_rls_policies.sql` must exist: devices (select/insert/update), access_logs (select/insert), alerts (select/insert), face_profiles (select/update), device_commands (**select/update** -- the Pi polls pending `start_register_face` commands and flips their status; the frontend admin insert goes through `device_commands_admin_all` in `schema.sql`, no anon insert needed). There is **no anon insert on face_profiles** -- profiles are created from the web app.
 
 ## Supabase client quirks (high-signal)
 - Offline queue = sqlite `pending_ops.db` + background worker thread. Network errors are retried; permanent errors (401/403/404/400/RLS 42501) are logged then dropped.
@@ -28,12 +30,13 @@ SmartLock edge device: Raspberry Pi face-recognition door lock (TFT ILI9341 + ca
 - Main flow (main.py): grant when cosine score >= 0.40; faces smaller than `MIN_FACE_SIZE=60`px are treated as unknown; `result=unknown` when no profile or score < 0.15, `denied` otherwise. Matching takes the **max score across all templates** of a person. YuNet detection threshold is 0.65 (both main.py and registration). Cooldowns: `GRANT_COOLDOWN=5.0`, `ALERT_COOLDOWN=3.0`, heartbeat every 15s.
 - **Deletion sync (main.py)**: `sync_face_db()` prunes `face_db.npy` entries whose `face_name` no longer exists in Supabase face_profiles -- runs at startup and every 60s. Skips silently when sync is disabled/offline (`load_face_profiles()` returns `None` on disabled or network error, `{}` only on a successful empty fetch -- do not conflate them, or a network blip would wipe the whole DB). Deleting a user in the web app stops recognition on the Pi within ~60s.
 - `diag_face_db.py` (Pi-only, camera+models, no GPIO): `list` / `remove <idx>` (auto-backup `face_db.npy.bak`) / full diag: template norms, intra/cross-profile cosine, camera freeze check, live match of the person in front of the camera.
+- **Remote registration (main.py)**: every 5s `fetch_pending_register_command()` looks for `device_commands` rows (device_id = this device, command = `start_register_face`, status = `pending`). Found one -> mark `running`, run `registration.run_registration(name, cap=cap)` (TFT shows the pose UI, recognition paused), mark `done`/`failed` with `result_message`, then reload face_db + profiles. The frontend "Register Face" button inserts the command (payload `{face_name}`) and polls the row status; `fetch_pending_register_command` returns `None` when sync disabled or `_device_id` unknown (ensure_device failed) -- commands then stay pending, no crash.
 
 ## Verification / testing
 - No test framework, lint, or typecheck config. Sanity-check with `py_compile`.
 - On Windows console set `PYTHONIOENCODING=utf-8` (prints are Vietnamese); Pi (Linux) is fine.
 - Dev-PC test path: `DRY_RUN=1` in `.env` + call `supabase_client` functions (e.g. `ensure_device`, `record_access`, `flush_pending`) -- never run `main.py`.
-- Registration (`register_face_multi.py`): exits early unless `.env` is configured AND a `face_profiles` row with the exact `face_name` already exists on Supabase (created via web app first). Collects 15 samples across 3 poses (thang/trai/phai, 5 moi pose), filters blurry (Laplacian variance >= 25) and small (< 60px) faces, writes `face_db.npy` (3 templates/person), updates profile status to `registered`.
+- Registration (`register_face_multi.py`): exits early unless `.env` is configured AND a `face_profiles` row with the exact `face_name` already exists on Supabase (created via web app first). Name can be passed as argv (`register_face_multi.py "Vo Minh Hieu"`) or prompted. Collects 15 samples across 3 poses (thang/trai/phai, 5 moi pose), filters blurry (Laplacian variance >= 25) and small (< 60px) faces, writes `face_db.npy` (3 templates/person), updates profile status to `registered`. Each pose times out after 60s (no face) -> flow fails gracefully instead of hanging (important for remote trigger).
 - Threshold calibration (`calibrate_threshold.py`, Pi-only, camera + models only): `collect known|unknown <n>` saves embeddings+frames to `calib_*`/, then `score` prints score distributions vs `face_db.npy` and suggests a cosine threshold from real data.
 - Deploy steps (pscp/git, venv, systemd `fina.service`) are in `DEPLOY.md`.
 
