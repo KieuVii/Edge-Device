@@ -6,7 +6,7 @@ alter table public.access_logs
   add column if not exists access_type text
   check (access_type in ('checkin', 'checkout'));
 
--- 2. device_commands: cho phep lenh start_checkin / start_checkout
+-- 2. device_commands: cho phep lenh start_checkin / start_checkout / restart_service
 alter table public.device_commands
   drop constraint if exists device_commands_command_check;
 alter table public.device_commands
@@ -18,5 +18,6 @@ alter table public.device_commands
     'start_register_face',
     'sync_face_db',
     'start_checkin',
-    'start_checkout'
+    'start_checkout',
+    'restart_service'
   ));

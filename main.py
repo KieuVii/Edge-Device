@@ -1,5 +1,6 @@
 import os
 import signal
+import subprocess
 import sys
 import time
 from threading import Thread
@@ -36,8 +37,20 @@ VERIFY_TIMEOUT = 45.0
 POLL_INTERVAL = 3.0
 HEARTBEAT_INTERVAL = 15.0
 PROFILE_SYNC_INTERVAL = 60.0
+WATCHDOG_INTERVAL = 10.0
 
 blank = np.zeros((240, 320, 3), dtype=np.uint8)
+
+
+def watchdog_ping():
+    """Bao cho systemd rang main loop con song (WatchdogSec=30 trong fina.service).
+    Neu loop bi block qua 30s (mat mang blackhole, camera treo...), systemd tu kill + restart."""
+    if not os.environ.get("NOTIFY_SOCKET"):
+        return
+    try:
+        subprocess.run(["systemd-notify", "WATCHDOG=1"], timeout=3, capture_output=True)
+    except Exception:
+        pass
 
 
 def get_templates(name):
@@ -157,6 +170,7 @@ def run_verification(access_type, cap):
 
 
 def handle_command(cmd):
+    """Xu ly mot lenh. Tra ve True neu can khoi dong lai service (lenh restart_service)."""
     global face_db
     cmd_id = cmd["id"]
     ctype = cmd["command"]
@@ -166,6 +180,7 @@ def handle_command(cmd):
     sb.set_command_status(cmd_id, "running")
     ok = False
     msg = ""
+    restart_requested = False
     cap = None
     try:
         if ctype == "start_register_face":
@@ -179,6 +194,10 @@ def handle_command(cmd):
             access_type = ctype.replace("start_", "")
             cap = open_camera()
             ok, msg = run_verification(access_type, cap)
+        elif ctype == "restart_service":
+            ok = True
+            restart_requested = True
+            msg = "Service dang khoi dong lai..."
         else:
             msg = f"Chua ho tro lenh: {ctype}"
     except Exception as exc:
@@ -199,6 +218,7 @@ def handle_command(cmd):
         sync_face_db()
 
     show_idle()
+    return restart_requested
 
 
 # 4. Luong chinh
@@ -211,12 +231,14 @@ def main():
     sb.ensure_device()
     sb.load_face_profiles()
     sync_face_db()
+    sb.recover_stale_commands()
 
     last_heartbeat = 0
     last_profile_sync = 0
     last_cmd_check = 0
+    last_watchdog = 0
 
-    print(">> HE THONG SMART LOCK DA SAN SANG - doi lenh tu web (Register/Checkin/Checkout)")
+    print(">> HE THONG SMART LOCK DA SAN SANG - doi lenh tu web (Register/Checkin/Checkout/Restart)")
 
     try:
         while True:
@@ -225,7 +247,10 @@ def main():
             if current_time - last_cmd_check >= POLL_INTERVAL:
                 cmd = sb.fetch_pending_command()
                 if cmd is not None:
-                    handle_command(cmd)
+                    restart_requested = handle_command(cmd)
+                    if restart_requested:
+                        print(">> Khoi dong lai service theo lenh tu web...")
+                        sys.exit(0)
                 last_cmd_check = time.time()
 
             if current_time - last_heartbeat >= HEARTBEAT_INTERVAL:
@@ -235,6 +260,10 @@ def main():
             if current_time - last_profile_sync >= PROFILE_SYNC_INTERVAL:
                 sync_face_db()
                 last_profile_sync = current_time
+
+            if current_time - last_watchdog >= WATCHDOG_INTERVAL:
+                watchdog_ping()
+                last_watchdog = current_time
 
             time.sleep(0.5)
 

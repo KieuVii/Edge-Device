@@ -8,6 +8,9 @@ ExecStart=/home/pizero2w/edge-device/Edge-Device/venv/bin/python /home/pizero2w/
 WorkingDirectory=/home/pizero2w/edge-device/Edge-Device
 Restart=always
 RestartSec=5
+# Watchdog: neu main.py khong bao "con song" trong 30s (ket mang blackhole, camera treo...)
+# thi systemd tu kill + restart -> tu phuc hoi khong can SSH.
+WatchdogSec=30
 User=pizero2w
 Environment=PYTHONUNBUFFERED=1
 

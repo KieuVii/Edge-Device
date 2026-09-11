@@ -80,7 +80,15 @@ def _client():
     global _client_obj
     if _client_obj is None:
         from supabase import create_client
-        _client_obj = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        try:
+            # Timeout ro rang: khong cho phep request block vo han khi mat mang
+            _client_obj = create_client(
+                SUPABASE_URL, SUPABASE_SERVICE_KEY,
+                postgrest_client_timeout=8,
+                storage_client_timeout=8,
+            )
+        except TypeError:
+            _client_obj = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return _client_obj
 
 
@@ -231,10 +239,17 @@ def _handle_face_registered(payload):
     _client().table("face_profiles").update(fields, returning="minimal").eq("face_name", face_name).execute()
 
 
+def _handle_command_status(payload):
+    cmd_id = payload["id"]
+    fields = payload["fields"]
+    _client().table("device_commands").update(fields, returning="minimal").eq("id", cmd_id).execute()
+
+
 _HANDLERS = {
     "access_event": _handle_access_event,
     "device_state": _handle_device_state,
     "face_registered": _handle_face_registered,
+    "command_status": _handle_command_status,
 }
 
 
@@ -511,6 +526,20 @@ def fetch_pending_command():
         return None
 
 
+def _update_command_status(command_id, fields):
+    """Cap nhat trang thai lenh; khi mat mang thi enqueue de retry khi co mang."""
+    try:
+        _client().table("device_commands").update(fields, returning="minimal").eq("id", command_id).execute()
+        return True
+    except Exception as exc:
+        if _is_offline_error(exc):
+            print(">> [Supabase] Mat mang khi cap nhat trang thai lenh, se gui lai qua queue:", str(exc)[:150])
+            _enqueue("command_status", {"id": command_id, "fields": fields})
+            return False
+        print(">> [Supabase] Cap nhat trang thai lenh loi:", str(exc)[:150])
+        return False
+
+
 def set_command_status(command_id, status, message=None):
     if not enabled():
         return False
@@ -519,9 +548,32 @@ def set_command_status(command_id, status, message=None):
         fields["result_message"] = str(message)[:500]
     if status in ("done", "failed", "cancelled"):
         fields["executed_at"] = _now_iso()
+    return _update_command_status(command_id, fields)
+
+
+def recover_stale_commands():
+    """Khoi dong lai: moi lenh 'running' con sot (Pi chet giua chung) -> failed, khong bao gio ket."""
+    if not enabled() or not _device_id:
+        return
     try:
-        _client().table("device_commands").update(fields, returning="minimal").eq("id", command_id).execute()
-        return True
+        resp = (
+            _client()
+            .table("device_commands")
+            .select("id")
+            .eq("device_id", _device_id)
+            .eq("status", "running")
+            .execute()
+        )
+        rows = _resp_rows(resp)
     except Exception as exc:
-        print(">> [Supabase] set_command_status loi:", str(exc)[:150])
-        return False
+        print(">> [Supabase] recover_stale_commands loi:", str(exc)[:150])
+        return
+    if not rows:
+        return
+    for row in rows:
+        _update_command_status(row["id"], {
+            "status": "failed",
+            "result_message": "Bi gian doan khi Pi khoi dong lai",
+            "executed_at": _now_iso(),
+        })
+    print(f">> [Supabase] Da danh dau {len(rows)} lenh running con sot la failed (Pi khoi dong lai).")
