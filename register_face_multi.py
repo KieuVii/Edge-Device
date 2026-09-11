@@ -87,6 +87,12 @@ recognizer = cv2.FaceRecognizerSF.create('face_recognition_sface_2021dec.onnx', 
 db_file = "face_db.npy"
 face_db = np.load(db_file, allow_pickle=True).item() if os.path.exists(db_file) else {}
 
+POSE_COUNT = 3
+SAMPLES_PER_POSE = 5
+MIN_FACE_SIZE = 60
+BLUR_MIN_VAR = 25.0
+POSE_NAMES = ["NHIN THANG", "NGHIENG TRAI", "NGHIENG PHAI"]
+
 # Nhập tên trước trên terminal
 new_name = input("Nhập tên người cần đăng ký (khớp face_name trên Supabase): ").strip()
 if not new_name:
@@ -108,41 +114,76 @@ cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
 
-features_list = []
-print(f">> Màn hình đã bật! Hãy nhìn vào camera và nghiêng nhẹ đầu để lấy mẫu cho [{canonical_name}]...")
+features_by_pose = []
+print(f">> Màn hình đã bật! Hãy nhìn vào camera cho [{canonical_name}]...")
+print(">> Mỗi pose thu 5 mẫu: nhìn thẳng / nghiêng trái / nghiêng phải.")
 
 try:
-    while len(features_list) < 10:
-        ret, frame = cap.read()
-        if not ret:
-            continue
+    for pose_idx in range(POSE_COUNT):
+        pose_samples = []
+        pose_name = POSE_NAMES[pose_idx]
+        print(f">> POSE {pose_idx + 1}/{POSE_COUNT}: {pose_name}")
+        while len(pose_samples) < SAMPLES_PER_POSE:
+            ret, frame = cap.read()
+            if not ret:
+                continue
 
-        frame = cv2.resize(frame, (320, 240))
-        disp = frame.copy()
+            frame = cv2.resize(frame, (320, 240))
+            disp = frame.copy()
 
-        detector.setInputSize((320, 240))
-        _, faces = detector.detect(frame)
+            detector.setInputSize((320, 240))
+            _, faces = detector.detect(frame)
 
-        if faces is not None and len(faces) > 0:
-            face = faces[0]
-            box = face[:4].astype(int)
-            cv2.rectangle(disp, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 2)
-            
-            aligned = recognizer.alignCrop(frame, face)
-            feat = recognizer.feature(aligned)
-            features_list.append(feat)
+            if faces is not None and len(faces) > 0:
+                areas = faces[:, 2] * faces[:, 3]
+                face = faces[int(np.argmax(areas))]
+                box = face[:4].astype(int)
+                bx, by, bw, bh = box
+                cv2.rectangle(disp, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
 
-            # Thanh trạng thái tiến độ
+                if bw >= MIN_FACE_SIZE and bh >= MIN_FACE_SIZE:
+                    face_gray = cv2.cvtColor(frame[by:by + bh, bx:bx + bw], cv2.COLOR_BGR2GRAY)
+                    sharpness = cv2.Laplacian(face_gray, cv2.CV_64F).var()
+                    if sharpness >= BLUR_MIN_VAR:
+                        aligned = recognizer.alignCrop(frame, face)
+                        feat = recognizer.feature(aligned)
+                        pose_samples.append(feat)
+                        msg = f"{pose_name}: {len(pose_samples)}/{SAMPLES_PER_POSE}"
+                        color = (0, 255, 255)
+                        time.sleep(0.15)
+                    else:
+                        msg = "DO BI MO - GIU YEN"
+                        color = (0, 0, 255)
+                else:
+                    msg = "DEN GAN HON"
+                    color = (0, 0, 255)
+            else:
+                msg = "CANH CHINH KHUON MAT"
+                color = (0, 0, 255)
+
             cv2.rectangle(disp, (0, 0), (320, 30), (0, 0, 0), -1)
-            cv2.putText(disp, f"TIEN DO: {len(features_list)*10}%", (10, 22), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
-            time.sleep(0.12)
-        else:
-            cv2.rectangle(disp, (0, 0), (320, 30), (0, 0, 0), -1)
-            cv2.putText(disp, "CANH CHINH KHUON MAT", (10, 22), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            cv2.putText(disp, f"P{pose_idx + 1}/{POSE_COUNT} {msg}", (10, 22),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            render_tft(disp)
 
-        render_tft(disp)
+        avg_feature = np.mean(pose_samples, axis=0)
+        norm = np.linalg.norm(avg_feature)
+        if norm > 0:
+            avg_feature = avg_feature / norm
+        features_by_pose.append(avg_feature)
+
+    templates = features_by_pose
+
+    internal_scores = []
+    for i in range(len(templates)):
+        for j in range(i + 1, len(templates)):
+            internal_scores.append(
+                recognizer.match(templates[i], templates[j], cv2.FaceRecognizerSF_FR_COSINE)
+            )
+    if internal_scores:
+        print(f">> Chất lượng template (cosine giữa các pose): min={min(internal_scores):.3f} max={max(internal_scores):.3f}")
+        if min(internal_scores) < 0.50:
+            print(">> ⚠️ Các pose quá khác nhau (< 0.50) - nên đăng ký lại với ánh sáng tốt hơn.")
 
     # Hiển thị thông báo hoàn tất lên màn hình
     cv2.rectangle(disp, (0, 0), (320, 240), (0, 0, 0), -1)
@@ -152,20 +193,15 @@ try:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
     render_tft(disp)
 
-    # Tính vector trung bình và chuẩn hóa L2
-    avg_feature = np.mean(features_list, axis=0)
-    norm = np.linalg.norm(avg_feature)
-    if norm > 0:
-        avg_feature = avg_feature / norm
-
     for key in [k for k in face_db if k.lower() == canonical_name.lower() and k != canonical_name]:
         del face_db[key]
 
-    face_db[canonical_name] = avg_feature
+    face_db[canonical_name] = templates
     np.save(db_file, face_db)
 
-    sync_result = sb.mark_face_registered(canonical_name, len(features_list))
-    print(f"\n>> ĐÃ ĐĂNG KÝ XONG CHO [{canonical_name}] VỚI {len(features_list)} MẪU ĐẶC TRƯNG!")
+    sample_total = POSE_COUNT * SAMPLES_PER_POSE
+    sync_result = sb.mark_face_registered(canonical_name, sample_total)
+    print(f"\n>> ĐÃ ĐĂNG KÝ XONG CHO [{canonical_name}] VỚI {sample_total} MẪU / {len(templates)} TEMPLATE!")
     print(f">> Danh sách hiện có trong DB: {list(face_db.keys())}")
     if sync_result == "ok":
         print(f">> [Supabase] face_profiles '{canonical_name}' đã cập nhật: registered.")

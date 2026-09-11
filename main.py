@@ -62,10 +62,11 @@ try:
 except Exception:
     face_db = {}
 
-detector = cv2.FaceDetectorYN.create('face_detection_yunet_2023mar.onnx', '', (320, 240), 0.5)
+detector = cv2.FaceDetectorYN.create('face_detection_yunet_2023mar.onnx', '', (320, 240), 0.65)
 recognizer = cv2.FaceRecognizerSF.create('face_recognition_sface_2021dec.onnx', '')
-COSINE_THRESHOLD = 0.32
+COSINE_THRESHOLD = 0.40
 DENIED_SIM_MIN = 0.15
+MIN_FACE_SIZE = 60
 GRANT_COOLDOWN = 5.0
 ALERT_COOLDOWN = 3.0
 
@@ -85,6 +86,12 @@ def open_door_relay():
     RELAY_PIN.off()
     sb.set_door_status("locked")
 
+def get_templates(name):
+    feats = face_db[name]
+    if isinstance(feats, np.ndarray):
+        return [feats]
+    return list(feats)
+
 def verify_face_worker(frame_input):
     global system_status, status_hold_time, is_verifying, active_face_box
     global last_access_event_time, last_grant_time
@@ -98,19 +105,25 @@ def verify_face_worker(frame_input):
     if faces is not None and len(faces) > 0:
         face = faces[0]
         active_face_box = face[:4].astype(int)
-
-        aligned = recognizer.alignCrop(frame_input, face)
-        feature = recognizer.feature(aligned)
+        bx, by, bw, bh = active_face_box
 
         top_name = None
         top_score = -1.0
         matched_name = None
 
-        for name, db_feature in face_db.items():
-            score = recognizer.match(feature, db_feature, cv2.FaceRecognizerSF_FR_COSINE)
-            if score > top_score:
-                top_score = score
-                top_name = name
+        if bw >= MIN_FACE_SIZE and bh >= MIN_FACE_SIZE:
+            aligned = recognizer.alignCrop(frame_input, face)
+            feature = recognizer.feature(aligned)
+
+            for name in face_db:
+                for db_feature in get_templates(name):
+                    score = recognizer.match(feature, db_feature, cv2.FaceRecognizerSF_FR_COSINE)
+                    if score > top_score:
+                        top_score = score
+                        top_name = name
+        else:
+            print(f">> [SKIP] Mặt quá nhỏ ({bw}x{bh}px < {MIN_FACE_SIZE}) - xem là khuôn mặt lạ")
+
         if top_name is not None and top_score >= COSINE_THRESHOLD:
             matched_name = top_name
 
@@ -131,7 +144,7 @@ def verify_face_worker(frame_input):
         else:
             system_status = f"DENIED ({top_score:.2f})"
             status_hold_time = now + 2.0
-            print(f">> [ACCESS DENIED] Không trùng khớp (Score: {top_score:.2f})")
+            print(f">> [ACCESS DENIED] {top_name or 'NO_MATCH'} (Score: {top_score:.2f})")
 
             if len(face_db) == 0 or top_score < DENIED_SIM_MIN:
                 result = "unknown"
