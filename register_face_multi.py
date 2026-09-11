@@ -17,12 +17,24 @@ if not sb.configured():
 # ==========================================
 # 1. CAU HINH PHAN CUNG TFT
 # ==========================================
-DC_PIN = OutputDevice(24)   # Pin 18 (GPIO 24)
-RST_PIN = OutputDevice(25)  # Pin 22 (GPIO 25)
-RST_PIN.on()                # Keo chan RESET len muc HIGH (3.3V) de kich hoat man hinh
+try:
+    DC_PIN = OutputDevice(24)   # Pin 18 (GPIO 24)
+    RST_PIN = OutputDevice(25)  # Pin 22 (GPIO 25)
+    RST_PIN.on()                # Keo chan RESET len muc HIGH (3.3V) de kich hoat man hinh
+except Exception as exc:
+    print("\n>> KHONG MO DUOC GPIO:", exc)
+    print(">> Co the main.py hoac fina.service dang chay va giu GPIO.")
+    print(">> Dung truoc roi chay lai: sudo systemctl stop fina  (hoac Ctrl+C terminal main.py)")
+    exit(1)
 
 spi = spidev.SpiDev()
-spi.open(0, 0)
+try:
+    spi.open(0, 0)
+except OSError as exc:
+    print("\n>> KHONG MO DUOC SPI (0,0):", exc)
+    print(">> Thuong do main.py hoac fina.service dang chay va giu SPI bus.")
+    print(">> Dung truoc roi chay lai: sudo systemctl stop fina  (hoac Ctrl+C terminal main.py)")
+    exit(1)
 spi.max_speed_hz = 24000000
 spi.mode = 0
 
@@ -149,8 +161,12 @@ def render_capture(disp, user_name, pose_idx, pose_count, pose_name, pose_done,
 
 # Bat man hinh truoc, hien thi huong dan
 init_tft()
+print(">> TFT da khoi tao xong")
 blank = np.zeros((240, 320, 3), dtype=np.uint8)
-show_message(blank, ["DANG KY KHUON MAT", "NHAP TEN TREN TERMINAL"], (255, 255, 0))
+for _ in range(3):
+    show_message(blank, ["DANG KY KHUON MAT", "NHAP TEN TREN TERMINAL"], (255, 255, 0))
+    time.sleep(0.15)
+print(">> Da gui man hinh huong dan - neu TFT van trang, xem loi in o tren terminal")
 
 new_name = read_name("Nhap ten nguoi can dang ky (khop face_name tren Supabase): ")
 if not new_name:
