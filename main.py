@@ -41,16 +41,51 @@ WATCHDOG_INTERVAL = 10.0
 
 blank = np.zeros((240, 320, 3), dtype=np.uint8)
 
+# Flag: da co lenh dang chay trong worker thread (chan lenh chong nhau)
+_command_busy = False
+
 
 def watchdog_ping():
-    """Bao cho systemd rang main loop con song (WatchdogSec=30 trong fina.service).
-    Neu loop bi block qua 30s (mat mang blackhole, camera treo...), systemd tu kill + restart."""
+    """Bao cho systemd rang process con song (WatchdogSec=30 trong fina.service)."""
     if not os.environ.get("NOTIFY_SOCKET"):
         return
     try:
         subprocess.run(["systemd-notify", "WATCHDOG=1"], timeout=3, capture_output=True)
     except Exception:
         pass
+
+
+def _watchdog_loop():
+    """Thread rieng: ping watchdog vo dieu kien moi 10s, KHONG phu thuoc main loop.
+    Nen cac lenh dai (checkin 45s, registration 180s) khong bi systemd kill giua chung."""
+    while True:
+        watchdog_ping()
+        time.sleep(WATCHDOG_INTERVAL)
+
+
+def shutdown_cleanup():
+    try:
+        tft_ui.close()
+    except Exception:
+        pass
+    try:
+        RELAY_PIN.close()
+    except Exception:
+        pass
+    sb.set_device_offline()
+    sb.stop_worker(timeout=6)
+
+
+def _restart_service():
+    """Tu khoi dong lai bang os.execv: re-exec CUNG PID, systemd khong thay process thoat
+    -> khong phu thuoc Restart= cua unit file. Chi chay sau khi da don dep sach."""
+    print(">> Khoi dong lai service theo lenh tu web (execv)...")
+    shutdown_cleanup()
+    try:
+        os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)])
+    except Exception as exc:
+        print(">> execv loi, fallback sys.exit(0):", exc)
+    sys.exit(0)
 
 
 def get_templates(name):
@@ -221,6 +256,26 @@ def handle_command(cmd):
     return restart_requested
 
 
+def _command_worker(cmd):
+    """Chay lenh trong thread rieng de main loop khong bi block:
+    - heartbeat + watchdog tiep tuc trong luc lenh chay (device khong bi coi offline)
+    - restart_service van xu ly duoc khi lenh khac dang ket (thoat hiem tu web)"""
+    global _command_busy
+    restart_requested = False
+    try:
+        restart_requested = handle_command(cmd)
+    except Exception as exc:
+        print(">> [Lenh] Loi khong mong muon:", exc)
+        try:
+            sb.set_command_status(cmd["id"], "failed", message=str(exc)[:500])
+        except Exception:
+            pass
+    finally:
+        _command_busy = False
+    if restart_requested:
+        _restart_service()
+
+
 # 4. Luong chinh
 def main():
     global face_db
@@ -236,7 +291,9 @@ def main():
     last_heartbeat = 0
     last_profile_sync = 0
     last_cmd_check = 0
-    last_watchdog = 0
+
+    if os.environ.get("NOTIFY_SOCKET"):
+        Thread(target=_watchdog_loop, name="watchdog", daemon=True).start()
 
     print(">> HE THONG SMART LOCK DA SAN SANG - doi lenh tu web (Register/Checkin/Checkout/Restart)")
 
@@ -247,10 +304,14 @@ def main():
             if current_time - last_cmd_check >= POLL_INTERVAL:
                 cmd = sb.fetch_pending_command()
                 if cmd is not None:
-                    restart_requested = handle_command(cmd)
-                    if restart_requested:
-                        print(">> Khoi dong lai service theo lenh tu web...")
-                        sys.exit(0)
+                    if not _command_busy:
+                        _command_busy = True
+                        Thread(target=_command_worker, args=(cmd,), name="command-worker", daemon=True).start()
+                    elif cmd.get("command") == "restart_service":
+                        # Thoat hiem: lenh restart duoc xu ly ngay ca khi lenh khac dang ket
+                        Thread(target=_command_worker, args=(cmd,), name="command-restart", daemon=True).start()
+                    else:
+                        print(">> [Lenh] Dang ban voi lenh khac, de pending:", cmd.get("command"))
                 last_cmd_check = time.time()
 
             if current_time - last_heartbeat >= HEARTBEAT_INTERVAL:
@@ -261,19 +322,12 @@ def main():
                 sync_face_db()
                 last_profile_sync = current_time
 
-            if current_time - last_watchdog >= WATCHDOG_INTERVAL:
-                watchdog_ping()
-                last_watchdog = current_time
-
             time.sleep(0.5)
 
     except KeyboardInterrupt:
         print("\n>> Dung he thong.")
     finally:
-        tft_ui.close()
-        RELAY_PIN.close()
-        sb.set_device_offline()
-        sb.stop_worker(timeout=6)
+        shutdown_cleanup()
 
 
 if __name__ == "__main__":
