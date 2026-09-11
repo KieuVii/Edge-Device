@@ -47,9 +47,9 @@ CAPTURE_DIR.mkdir(exist_ok=True)
 
 _CONFIGURED = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 if not _CONFIGURED:
-    print(">> [Supabase] Chưa cấu hình SUPABASE_URL/SERVICE_KEY -> chạy KHÔNG đồng bộ (vẫn nhận diện & mở khóa bình thường).")
+    print(">> [Supabase] Chua cau hinh SUPABASE_URL/SERVICE_KEY -> chay KHONG dong bo (van nhan dien & mo khoa binh thuong).")
 elif DRY_RUN:
-    print(">> [Supabase] Đang ở chế độ DRY_RUN - chỉ in payload, không gửi lên Supabase.")
+    print(">> [Supabase] Dang o che do DRY_RUN - chi in payload, khong gui len Supabase.")
 
 _client_obj = None
 _device_id = None
@@ -265,7 +265,7 @@ def _worker_loop():
                 _delete(row["id"])
             except Exception as exc:
                 if _is_permanent_error(exc):
-                    print(">> [Supabase] Bỏ ghi nhận (lỗi cấu hình/không thể xử lý):", str(exc)[:200])
+                    print(">> [Supabase] Bo ghi nhan (loi cau hinh/khong the xu ly):", str(exc)[:200])
                     try:
                         payload = json.loads(row["payload"])
                         _cleanup_payload_file(payload)
@@ -274,12 +274,12 @@ def _worker_loop():
                     _delete(row["id"])
                 elif _is_offline_error(exc):
                     _offline = True
-                    print(">> [Supabase] Mất kết nối, các bản ghi sẽ gửi lại khi có mạng...")
+                    print(">> [Supabase] Mat ket noi, cac ban ghi se gui lai khi co mang...")
                     break
                 else:
                     attempts = int(row["attempts"]) + 1
                     _mark_error(row["id"], attempts, str(exc))
-                    print(">> [Supabase] Gửi thất bại, sẽ thử lại:", str(exc)[:150])
+                    print(">> [Supabase] Gui that bai, se thu lai:", str(exc)[:150])
         time.sleep(2 if not _offline else 8)
 
 
@@ -312,11 +312,11 @@ def flush_pending(timeout=8):
                 progressed = True
             except Exception as exc:
                 if _is_permanent_error(exc):
-                    print(">> [Supabase] Bỏ ghi nhận (flush):", str(exc)[:200])
+                    print(">> [Supabase] Bo ghi nhan (flush):", str(exc)[:200])
                     _delete(row["id"])
                     progressed = True
                 elif _is_offline_error(exc):
-                    print(">> [Supabase] Vẫn chưa có mạng, còn bản ghi chờ gửi lại sau.")
+                    print(">> [Supabase] Van chua co mang, con ban ghi cho gui lai sau.")
                     return
                 else:
                     attempts = int(row["attempts"]) + 1
@@ -333,7 +333,7 @@ def stop_worker(timeout=8):
     if enabled():
         remaining = _drain(1)
         if remaining:
-            print(f">> [Supabase] Còn {len(_drain(100))} bản ghi chưa gửi được (đã lưu local, sẽ gửi khi chạy lại).")
+            print(f">> [Supabase] Con {len(_drain(100))} ban ghi chua gui duoc (da luu local, se gui khi chay lai).")
 
 
 def ensure_device():
@@ -357,7 +357,7 @@ def ensure_device():
             _device_id = rows[0]["id"]
             return _device_id
     except Exception as exc:
-        print(">> [Supabase] ensure_device lỗi:", str(exc)[:150])
+        print(">> [Supabase] ensure_device loi:", str(exc)[:150])
     return None
 
 
@@ -380,7 +380,7 @@ def load_face_profiles():
                     "room_id": p.get("room_id"),
                 }
     except Exception as exc:
-        print(">> [Supabase] load_face_profiles lỗi:", str(exc)[:150])
+        print(">> [Supabase] load_face_profiles loi:", str(exc)[:150])
     return _face_profiles
 
 
@@ -460,7 +460,7 @@ def find_face_profile(name):
         rows = _resp_rows(resp)
         return rows[0] if rows else None
     except Exception as exc:
-        print(">> [Supabase] find_face_profile lỗi:", str(exc)[:150])
+        print(">> [Supabase] find_face_profile loi:", str(exc)[:150])
         return None
 
 
@@ -479,8 +479,8 @@ def mark_face_registered(face_name, sample_count=10):
         return "ok"
     except Exception as exc:
         if _is_offline_error(exc) or _is_permanent_error(exc):
-            print(">> [Supabase] mark_face_registered tạm hoãn, sẽ gửi lại:", str(exc)[:150])
+            print(">> [Supabase] mark_face_registered tam hoan, se gui lai:", str(exc)[:150])
             _enqueue("face_registered", {"face_name": face_name, **fields})
             return "queued"
-        print(">> [Supabase] mark_face_registered lỗi:", str(exc)[:150])
+        print(">> [Supabase] mark_face_registered loi:", str(exc)[:150])
         return "error"

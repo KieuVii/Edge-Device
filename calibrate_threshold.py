@@ -33,7 +33,7 @@ DB_FILE = "face_db.npy"
 
 def load_models():
     if not (os.path.exists(YUNET) and os.path.exists(SFACE)):
-        print(f">> Thiếu model: cần {YUNET} và {SFACE} trong thư mục hiện hành.")
+        print(f">> Thieu model: can {YUNET} va {SFACE} trong thu muc hien hanh.")
         sys.exit(1)
     detector = cv2.FaceDetectorYN.create(YUNET, "", (320, 240), 0.65)
     recognizer = cv2.FaceRecognizerSF.create(SFACE, "")
@@ -42,7 +42,7 @@ def load_models():
 
 def load_db():
     if not os.path.exists(DB_FILE):
-        print(">> Chưa có face_db.npy - hãy chạy register_face_multi.py trước.")
+        print(">> Chua co face_db.npy - hay chay register_face_multi.py truoc.")
         sys.exit(1)
     return np.load(DB_FILE, allow_pickle=True).item()
 
@@ -65,7 +65,7 @@ def detect_best_face(detector, frame):
 
 def collect(group, count):
     if group not in ("known", "unknown"):
-        print(">> group phải là 'known' hoặc 'unknown'.")
+        print(">> group phai la 'known' hoac 'unknown'.")
         sys.exit(1)
     out_dir = f"calib_{group}"
     os.makedirs(out_dir, exist_ok=True)
@@ -75,12 +75,12 @@ def collect(group, count):
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
     if not cap.isOpened():
-        print(">> Không mở được camera (/dev/video0).")
+        print(">> Khong mo duoc camera (/dev/video0).")
         sys.exit(1)
 
     saved = 0
     blank_run = 0
-    print(f">> Bắt đầu thu {count} mẫu cho nhóm '{group}'. Đứng trước camera, hơi xoay đầu.")
+    print(f">> Bat dau thu {count} mau cho nhom '{group}'. Dung truoc camera, hoi xoay dau.")
     while saved < count:
         ret, frame = cap.read()
         if not ret:
@@ -91,7 +91,7 @@ def collect(group, count):
         if face is None:
             blank_run += 1
             if blank_run >= MAX_FRAMES_WITHOUT_FACE:
-                print(">> Không thấy mặt trong 120 khung - kiểm tra camera/ánh sáng.")
+                print(">> Khong thay mat trong 120 khung - kiem tra camera/anh sang.")
                 break
             time.sleep(0.05)
             continue
@@ -112,18 +112,18 @@ def collect(group, count):
         np.save(os.path.join(out_dir, f"{stamp}.npy"), feat)
         saved += 1
         blank_run = 0
-        print(f">> [{group}] Đã lưu {saved}/{count} (box {bw}x{bh}px)")
+        print(f">> [{group}] Da luu {saved}/{count} (box {bw}x{bh}px)")
         time.sleep(0.5)
 
     cap.release()
-    print(f">> Xong nhóm '{group}': {saved} mẫu trong {out_dir}/")
+    print(f">> Xong nhom '{group}': {saved} mau trong {out_dir}/")
 
 
 def score():
     _, recognizer = load_models()
     face_db = load_db()
     if not face_db:
-        print(">> face_db trống.")
+        print(">> face_db trong.")
         sys.exit(1)
 
     groups = {}
@@ -133,7 +133,7 @@ def score():
             if f.endswith(".npy")
         ) if os.path.isdir(f"calib_{group}") else []
         groups[group] = [np.load(os.path.join(f"calib_{group}", f)) for f in files]
-        print(f">> Nhóm '{group}': {len(groups[group])} embedding")
+        print(f">> Nhom '{group}': {len(groups[group])} embedding")
 
     def best_scores(feats_list):
         out = []
@@ -149,37 +149,37 @@ def score():
 
     def describe(values):
         if not values:
-            return "(không có dữ liệu)"
+            return "(khong co du lieu)"
         arr = np.array(values)
         return (f"n={len(arr)} min={arr.min():.3f} max={arr.max():.3f} "
                 f"mean={arr.mean():.3f} median={np.median(arr):.3f}")
 
     known_scores = best_scores(groups["known"])
     unknown_scores = best_scores(groups["unknown"])
-    print("\n>> PHÂN PHỐI SCORE (cosine, so với face_db):")
+    print("\n>> PHAN PHOI SCORE (cosine, so voi face_db):")
     print(f"   Quen : {describe(known_scores)}")
-    print(f"   Lạ   : {describe(unknown_scores)}")
+    print(f"   La   : {describe(unknown_scores)}")
 
     if known_scores and unknown_scores:
-        print("\n   Sắp xếp (thấp -> cao):")
+        print("\n   Sap xep (thap -> cao):")
         print(f"   Quen : {sorted(round(s, 3) for s in known_scores)}")
-        print(f"   Lạ   : {sorted(round(s, 3) for s in unknown_scores)}")
+        print(f"   La   : {sorted(round(s, 3) for s in unknown_scores)}")
 
         max_unknown = max(unknown_scores)
         min_known = min(known_scores)
         if max_unknown < min_known:
             suggested = round((max_unknown + min_known) / 2, 3)
-            print(f"\n>> NGƯỠNG ĐỀ XUẤT: {suggested} "
-                  f"(cách biệt max_lạ={max_unknown:.3f} / min_quen={min_known:.3f})")
+            print(f"\n>> NGUONG DE XUAT: {suggested} "
+                  f"(cach biet max_la={max_unknown:.3f} / min_quen={min_known:.3f})")
         else:
-            print("\n>> ⚠️ Vùng score quen/lạ CHỒNG NHAU - cần đăng ký lại với chất lượng tốt hơn,"
-                  " tăng số mẫu, hoặc xem xét đổi model.")
+            print("\n>> WARN: Vung score quen/la CHONG NHAU - can dang ky lai voi chat luong tot hon,"
+                  " tang so mau, hoac xem xet doi model.")
         for t in (0.40, 0.45):
             fa = sum(1 for s in unknown_scores if s >= t) / len(unknown_scores)
             fr = sum(1 for s in known_scores if s < t) / len(known_scores)
-            print(f"   Tại ngưỡng {t:.2f}: người lạ lọt={fa * 100:.1f}% | người quen bị chặn={fr * 100:.1f}%")
+            print(f"   Tai nguong {t:.2f}: nguoi la lot={fa * 100:.1f}% | nguoi quen bi chan={fr * 100:.1f}%")
     else:
-        print(">> Cần thu cả 2 nhóm trước: python calibrate_threshold.py collect <known|unknown> <số mẫu>")
+        print(">> Can thu ca 2 nhom truoc: python calibrate_threshold.py collect <known|unknown> <so mau>")
 
 
 if __name__ == "__main__":

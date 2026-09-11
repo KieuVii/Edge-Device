@@ -1,46 +1,46 @@
-# Hướng dẫn triển khai lên Raspberry Pi
+# Huong dan trien khai len Raspberry Pi
 
-Tài liệu này hướng dẫn nạp code chạy SmartLock (nhận diện khuôn mặt + mở khóa) lên Raspberry Pi thông qua PuTTY/SCP.
+Tai lieu nay huong dan nap code chay SmartLock (nhan dien khuon mat + mo khoa) len Raspberry Pi thong qua PuTTY/SCP.
 
 ---
 
-## 1. Tổng quan kiến trúc
+## 1. Tong quan kien truc
 
-| Thành phần | Chạy ở đâu |
+| Thanh phan | Chay o dau |
 |---|---|
-| `main.py` (nhận diện + mở khóa) | Raspberry Pi (điều khiển GPIO, SPI, camera, relay) |
-| `register_face_multi.py` (đăng ký khuôn mặt) | Raspberry Pi |
-| `supabase_client.py` (đồng bộ dữ liệu) | Chạy chung trên Pi, gọi API Supabase |
-| Supabase (database, storage, RLS) | Cloud — đã host sẵn |
-| Frontend Angular (dashboard) | Host riêng (Vercel/Netlify) hoặc local |
+| `main.py` (nhan dien + mo khoa) | Raspberry Pi (dieu khien GPIO, SPI, camera, relay) |
+| `register_face_multi.py` (dang ky khuon mat) | Raspberry Pi |
+| `supabase_client.py` (dong bo du lieu) | Chay chung tren Pi, goi API Supabase |
+| Supabase (database, storage, RLS) | Cloud -- da host san |
+| Frontend Angular (dashboard) | Host rieng (Vercel/Netlify) hoac local |
 
-> Python code **không thể** chạy trên server từ xa vì phải trực tiếp điều khiển phần cứng (GPIO/SPI/camera/relay).
+> Python code **khong the** chay tren server tu xa vi phai truc tiep dieu khien phan cung (GPIO/SPI/camera/relay).
 
 ---
 
-## 2. Các file cần nạp lên Pi
+## 2. Cac file can nap len Pi
 
-Chỉ cần **4 file** trong thư mục dự án:
+Chi can **4 file** trong thu muc du an:
 
-| File | Mô tả |
+| File | Mo ta |
 |---|---|
-| `main.py` | Chương trình chính: nhận diện khuôn mặt, ghi access_logs/alerts, điều khiển relay |
-| `register_face_multi.py` | Đăng ký khuôn mặt cho người dùng |
-| `supabase_client.py` | Thư viện đồng bộ Supabase (queue offline, upload ảnh, heartbeat) |
-| `requirements.txt` | Danh sách thư viện Python cần cài |
+| `main.py` | Chuong trinh chinh: nhan dien khuon mat, ghi access_logs/alerts, dieu khien relay |
+| `register_face_multi.py` | Dang ky khuon mat cho nguoi dung |
+| `supabase_client.py` | Thu vien dong bo Supabase (queue offline, upload anh, heartbeat) |
+| `requirements.txt` | Danh sach thu vien Python can cai |
 
-Không cần nạp: `.env.example`, `.gitignore`, `supabase_rls_policies.sql` (đã chạy xong trên Supabase), `pending_ops.db` (tự tạo), thư mục `captures/` (tự tạo).
+Khong can nap: `.env.example`, `.gitignore`, `supabase_rls_policies.sql` (da chay xong tren Supabase), `pending_ops.db` (tu tao), thu muc `captures/` (tu tao).
 
 ---
 
-## 3. Truyền file lên Pi
+## 3. Truyen file len Pi
 
-### Cách A — PSCP (đi kèm bộ PuTTY)
+### Cach A -- PSCP (di kem bo PuTTY)
 
-Trên Windows, trong thư mục chứa `pscp.exe` / `plink.exe`:
+Tren Windows, trong thu muc chua `pscp.exe` / `plink.exe`:
 
 ```bat
-:: Tạo thư mục trên Pi
+:: Tao thu muc tren Pi
 plink -pw <PASSWORD> pi@<IP_PI> "mkdir -p ~/fina"
 
 :: Copy 4 file
@@ -51,82 +51,82 @@ pscp -pw <PASSWORD> D:\Samsung-Project\Edge-Device\main.py ^
                      pi@<IP_PI>:/home/pi/fina/
 ```
 
-Thay `<IP_PI>` bằng IP của Pi (kiểm tra bằng `ip a` trên Pi) và `<PASSWORD>` bằng mật khẩu user `pi`.
+Thay `<IP_PI>` bang IP cua Pi (kiem tra bang `ip a` tren Pi) va `<PASSWORD>` bang mat khau user `pi`.
 
-### Cách B — git clone (khuyến nghị nếu có repo GitHub)
+### Cach B -- git clone (khuyen nghi neu co repo GitHub)
 
 ```bash
 git clone <URL_REPO_GITHUB> ~/fina
 cd ~/fina
-git pull   # lần sau chỉ cần kéo bản mới
+git pull   # lan sau chi can keo ban moi
 ```
 
 ---
 
-## 4. Tạo file `.env` trên Pi
+## 4. Tao file `.env` tren Pi
 
-`.env` chứa thông tin Supabase và định danh thiết bị. **Sao chép y hệt nội dung file `.env` đang có trên máy tính của bạn**:
+`.env` chua thong tin Supabase va dinh danh thiet bi. **Sao chep y het noi dung file `.env` dang co tren may tinh cua ban**:
 
 ```bash
 nano ~/fina/.env
 ```
 
-Nội dung mẫu (điền đúng giá trị của bạn):
+Noi dung mau (dien dung gia tri cua ban):
 
 ```ini
 # Supabase
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SERVICE_KEY=<publishable_key_hoac_service_role_key>
 
-# Định danh thiết bị (khớp device_code trong bảng devices)
+# Dinh danh thiet bi (khop device_code trong bang devices)
 DEVICE_CODE=DOOR_01
 DEVICE_NAME=Main Door Pi
 
-# DRY_RUN=1: chỉ in payload ra console, KHÔNG gửi lên Supabase (dùng để test)
+# DRY_RUN=1: chi in payload ra console, KHONG gui len Supabase (dung de test)
 DRY_RUN=0
 ```
 
-> ⚠️ `.env` bị `.gitignore` bỏ qua — không bao giờ commit file này lên GitHub.
+> WARN `.env` bi `.gitignore` bo qua -- khong bao gio commit file nay len GitHub.
 
 ---
 
-## 5. Cài đặt phần cứng và dependencies
+## 5. Cai dat phan cung va dependencies
 
-### 5.1. Bật SPI và Camera
+### 5.1. Bat SPI va Camera
 
 ```bash
 sudo raspi-config
 ```
 
-- **Interface Options → SPI → Enable**
-- **Interface Options → Camera → Enable**
-- Chọn **Finish** rồi **Reboot**
+- **Interface Options -> SPI -> Enable**
+- **Interface Options -> Camera -> Enable**
+- Chon **Finish** roi **Reboot**
 
-### 5.2. Cài dependencies
+### 5.2. Cai dependencies
 
 ```bash
 sudo apt update
 sudo apt install -y python3-pip python3-venv libatlas-base-dev
 
-# Tạo môi trường ảo
+# Tao moi truong ao
 python3 -m venv ~/fina/venv
 source ~/fina/venv/bin/activate
 
-# Cài thư viện
+# Cai thu vien
 pip install --upgrade pip
 pip install -r ~/fina/requirements.txt
 ```
 
-### 5.3. Nếu cài `opencv-python` bị lỗi (Pi 32-bit)
+### 5.3. Neu cai `opencv-python` bi loi (Pi 32-bit)
 
-Code **không dùng cửa sổ GUI** (màn hình hiển thị qua TFT/SPI), nên dùng bản headless cho nhẹ:
+Code **khong dung cua so GUI** (man hinh hien thi qua TFT/SPI), nen dung ban headless cho nhe:
 
 ```bash
 pip uninstall -y opencv-python
 pip install opencv-python-headless
 ```
 
-### 5.4. Phân quyền GPIO/SPI (nếu cần)
+### 5.4. Phan quyen GPIO/SPI (neu can)
 
 ```bash
 sudo usermod -aG spi,gpio pi
@@ -134,9 +134,9 @@ sudo usermod -aG spi,gpio pi
 
 ---
 
-## 6. Đăng ký khuôn mặt
+## 6. Dang ky khuon mat
 
-> **Trước tiên phải tạo user + `face_profiles` trên web** (frontend/Supabase). Ghi nhớ chính xác `face_name`.
+> **Truoc tien phai tao user + `face_profiles` tren web** (frontend/Supabase). Ghi nho chinh xac `face_name`.
 
 ```bash
 source ~/fina/venv/bin/activate
@@ -144,13 +144,13 @@ cd ~/fina
 python register_face_multi.py
 ```
 
-- Nhập đúng `face_name` khớp với Supabase.
-- Nhìn vào camera, nghiêng nhẹ đầu để thu đủ 10 mẫu.
-- Sau khi xong, `face_profiles` trên Supabase tự cập nhật `status = registered`.
+- Nhap dung `face_name` khop voi Supabase.
+- Nhin vao camera, nghieng nhe dau de thu du 10 mau.
+- Sau khi xong, `face_profiles` tren Supabase tu cap nhat `status = registered`.
 
 ---
 
-## 7. Chạy chương trình chính
+## 7. Chay chuong trinh chinh
 
 ```bash
 source ~/fina/venv/bin/activate
@@ -158,20 +158,20 @@ cd ~/fina
 python main.py
 ```
 
-Kiểm tra sau khi chạy:
+Kiem tra sau khi chay:
 
-- Màn hình TFT hiển thị trạng thái.
-- Trên Dashboard: thiết bị `DOOR_01` hiện **online**.
-- Mỗi lần nhận diện: có dòng mới trong bảng `access_logs` (granted/denied/no_face) và `alerts` nếu có cảnh báo.
-- Ảnh khuôn mặt lạ được upload lên Storage bucket `access-captures`.
+- Man hinh TFT hien thi trang thai.
+- Tren Dashboard: thiet bi `DOOR_01` hien **online**.
+- Moi lan nhan dien: co dong moi trong bang `access_logs` (granted/denied/no_face) va `alerts` neu co canh bao.
+- Anh khuon mat la duoc upload len Storage bucket `access-captures`.
 
-Thoát chương trình: `Ctrl+C` (Pi gửi `status = offline`).
+Thoat chuong trinh: `Ctrl+C` (Pi gui `status = offline`).
 
 ---
 
-## 8. Tự động chạy khi khởi động (tuỳ chọn)
+## 8. Tu dong chay khi khoi dong (tuy chon)
 
-### 8.1. Tạo service
+### 8.1. Tao service
 
 ```bash
 sudo nano /etc/systemd/system/fina.service
@@ -195,7 +195,7 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 ```
 
-### 8.2. Kích hoạt
+### 8.2. Kich hoat
 
 ```bash
 sudo systemctl daemon-reload
@@ -204,7 +204,7 @@ sudo systemctl start fina
 sudo systemctl status fina
 ```
 
-Xem log trực tiếp:
+Xem log truc tiep:
 
 ```bash
 journalctl -u fina -f
@@ -212,23 +212,23 @@ journalctl -u fina -f
 
 ---
 
-## 9. Xử lý lỗi thường gặp
+## 9. Xu ly loi thuong gap
 
-| Hiện tượng | Nguyên nhân / Cách xử lý |
+| Hien tuong | Nguyen nhan / Cach xu ly |
 |---|---|
-| Lỗi SPI / `Permission denied` khi mở `spi` | Chưa bật SPI hoặc thiếu quyền: `sudo raspi-config` bật SPI, `sudo usermod -aG spi,gpio pi`, reboot |
-| `ModuleNotFoundError: opencv` | Chạy `source ~/fina/venv/bin/activate` trước, hoặc cài lại opencv |
-| Lỗi thiếu `libGL` khi import cv2 | Cài `opencv-python-headless` |
-| Camera không mở (`VideoCapture(0)` fail) | Bật Camera trong raspi-config; USB camera kiểm tra `/dev/video0` |
-| Lỗi `42501 ... row-level security` | Thiếu policy RLS — chạy lại `supabase_rls_policies.sql` (gồm policy SELECT mới) trên Supabase |
-| Queue `pending_ops.db` có bản ghi lỗi | Có sự cố mạng/RLS; worker tự retry. Xoá được bằng: `rm ~/fina/pending_ops.db` |
-| Chữ tiếng Việt in loạn trên terminal | Không ảnh hưởng trên Pi (Linux dùng UTF-8), chỉ xảy ra trên Windows console |
-| Muốn test nhanh không cần phần cứng | Sửa `DRY_RUN=1` trong `.env` để chỉ in payload, không gửi Supabase |
+| Loi SPI / `Permission denied` khi mo `spi` | Chua bat SPI hoac thieu quyen: `sudo raspi-config` bat SPI, `sudo usermod -aG spi,gpio pi`, reboot |
+| `ModuleNotFoundError: opencv` | Chay `source ~/fina/venv/bin/activate` truoc, hoac cai lai opencv |
+| Loi thieu `libGL` khi import cv2 | Cai `opencv-python-headless` |
+| Camera khong mo (`VideoCapture(0)` fail) | Bat Camera trong raspi-config; USB camera kiem tra `/dev/video0` |
+| Loi `42501 ... row-level security` | Thieu policy RLS -- chay lai `supabase_rls_policies.sql` (gom policy SELECT moi) tren Supabase |
+| Queue `pending_ops.db` co ban ghi loi | Co su co mang/RLS; worker tu retry. Xoa duoc bang: `rm ~/fina/pending_ops.db` |
+| Chu tieng Viet in loan tren terminal | Khong anh huong tren Pi (Linux dung UTF-8), chi xay ra tren Windows console |
+| Muon test nhanh khong can phan cung | Sua `DRY_RUN=1` trong `.env` de chi in payload, khong gui Supabase |
 
 ---
 
-## 10. Ghi chú bảo mật
+## 10. Ghi chu bao mat
 
-- File `.env` chứa key truy cập Supabase — không commit lên Git, không chia sẻ.
-- Key đang dùng là **publishable key** (quyền anon). Nếu muốn an toàn tối đa, thay bằng **service_role key** trong `.env` (lưu kỹ, chỉ đặt trên Pi) — khi đó không cần các policy RLS.
-- Đặt mật khẩu `pi` mạnh và hạn chế mở SSH ra ngoài mạng công cộng.
+- File `.env` chua key truy cap Supabase -- khong commit len Git, khong chia se.
+- Key dang dung la **publishable key** (quyen anon). Neu muon an toan toi da, thay bang **service_role key** trong `.env` (luu ky, chi dat tren Pi) -- khi do khong can cac policy RLS.
+- Dat mat khau `pi` manh va han che mo SSH ra ngoai mang cong cong.

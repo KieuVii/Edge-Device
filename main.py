@@ -7,12 +7,12 @@ from gpiozero import OutputDevice
 
 import supabase_client as sb
 
-# 1. Phần cứng
+# 1. Phan cung
 DC_PIN = OutputDevice(24)       # Pin 18 (GPIO 24)
 RST_PIN = OutputDevice(25)      # Pin 22 (GPIO 25)
-RST_PIN.on()                    # Giữ chân RESET luôn ở 3.3V để màn hình chạy bình thường
+RST_PIN.on()                    # Giu chan RESET luon o 3.3V de man hinh chay binh thuong
 
-# Relay kích mức CAO: Mặc định tắt (0V)
+# Relay kich muc CAO: Mac dinh tat (0V)
 RELAY_PIN = OutputDevice(23, active_high=True, initial_value=False)
 
 spi = spidev.SpiDev()
@@ -54,11 +54,11 @@ def init_tft():
     send_cmd(0x2A); send_data([0x00, 0x00, 0x01, 0x3F])
     send_cmd(0x2B); send_data([0x00, 0x00, 0x00, 0xEF])
 
-# 2. Khởi tạo AI Model
+# 2. Khoi tao AI Model
 cv2.setNumThreads(4)
 try:
     face_db = np.load("face_db.npy", allow_pickle=True).item()
-    print(">> Đã nạp danh sách khuôn mặt:", list(face_db.keys()))
+    print(">> Da nap danh sach khuon mat:", list(face_db.keys()))
 except Exception:
     face_db = {}
 
@@ -70,7 +70,7 @@ MIN_FACE_SIZE = 60
 GRANT_COOLDOWN = 5.0
 ALERT_COOLDOWN = 3.0
 
-# 3. Quản lý trạng thái
+# 3. Quan ly trang thai
 system_status = "STANDBY"
 status_hold_time = 0
 is_verifying = False
@@ -78,7 +78,7 @@ active_face_box = None
 last_access_event_time = 0.0
 last_grant_time = 0.0
 
-# Hàm mở cửa cơ bản đúng như code cũ của bạn
+# Ham mo cua co ban dung nhu code cu cua ban
 def open_door_relay():
     sb.set_door_status("unlocked")
     RELAY_PIN.on()
@@ -122,7 +122,7 @@ def verify_face_worker(frame_input):
                         top_score = score
                         top_name = name
         else:
-            print(f">> [SKIP] Mặt quá nhỏ ({bw}x{bh}px < {MIN_FACE_SIZE}) - xem là khuôn mặt lạ")
+            print(f">> [SKIP] Mat qua nho ({bw}x{bh}px < {MIN_FACE_SIZE}) - xem la khuon mat la")
 
         if top_name is not None and top_score >= COSINE_THRESHOLD:
             matched_name = top_name
@@ -132,7 +132,7 @@ def verify_face_worker(frame_input):
             status_hold_time = now + 3.0
             last_grant_time = now
             last_access_event_time = now
-            print(f">> [ACCESS GRANTED] XÁC THỰC THÀNH CÔNG CHO: {matched_name} (Score: {top_score:.2f})")
+            print(f">> [ACCESS GRANTED] XAC THUC THANH CONG CHO: {matched_name} (Score: {top_score:.2f})")
             Thread(target=open_door_relay, daemon=True).start()
 
             profile = sb.get_face_profile(matched_name)
@@ -154,7 +154,7 @@ def verify_face_worker(frame_input):
                     "title": "Unknown Face Detected",
                     "severity": "high",
                     "status": "new",
-                    "message": f"Phát hiện khuôn mặt lạ (similarity {top_score:.2f}).",
+                    "message": f"Phat hien khuon mat la (similarity {top_score:.2f}).",
                 }
             else:
                 result = "denied"
@@ -164,7 +164,7 @@ def verify_face_worker(frame_input):
                     "title": "Access Denied",
                     "severity": "high",
                     "status": "new",
-                    "message": f"Truy cập bị từ chối - similarity {top_score:.2f} dưới ngưỡng {COSINE_THRESHOLD}.",
+                    "message": f"Truy cap bi tu choi - similarity {top_score:.2f} duoi nguong {COSINE_THRESHOLD}.",
                 }
 
             if cooldown_ok:
@@ -188,7 +188,7 @@ def verify_face_worker(frame_input):
                 "title": "No Face Detected",
                 "severity": "low",
                 "status": "new",
-                "message": "Chuyển động được phát hiện nhưng không thấy khuôn mặt.",
+                "message": "Chuyen dong duoc phat hien nhung khong thay khuon mat.",
             }
             sb.record_access(
                 result="no_face", face_name=None, threshold=COSINE_THRESHOLD, alert=alert,
@@ -197,7 +197,7 @@ def verify_face_worker(frame_input):
 
     is_verifying = False
 
-# 4. Luồng chính
+# 4. Luong chinh
 def main():
     global system_status, is_verifying, active_face_box
     init_tft()
@@ -215,7 +215,7 @@ def main():
     last_heartbeat = 0
     prev_time = time.time()
 
-    print(">> HỆ THỐNG ACCESS CONTROL ĐÃ HOẠT ĐỘNG HOÀN TOÀN TRÊN TFT!")
+    print(">> HE THONG ACCESS CONTROL DA HOAT DONG HOAN TOAN TREN TFT!")
 
     try:
         while True:
@@ -226,7 +226,7 @@ def main():
             current_time = time.time()
             frame = cv2.resize(frame, (320, 240))
 
-            # Phát hiện chuyển động
+            # Phat hien chuyen dong
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
@@ -239,12 +239,12 @@ def main():
             motion_score = np.sum(thresh)
             prev_gray = gray
 
-            # Reset trạng thái
+            # Reset trang thai
             if current_time >= status_hold_time and not is_verifying:
                 system_status = "STANDBY"
                 active_face_box = None
 
-            # Kích hoạt AI nhận diện
+            # Kich hoat AI nhan dien
             grant_ready = (current_time - last_grant_time) > GRANT_COOLDOWN or last_grant_time == 0
             if (motion_score > 35000 and (current_time - last_trigger_time > 1.5) and not is_verifying
                     and current_time >= status_hold_time and grant_ready):
@@ -253,36 +253,36 @@ def main():
                 system_status = "SCANNING..."
                 Thread(target=verify_face_worker, args=(frame.copy(),), daemon=True).start()
 
-            # Tính toán FPS
+            # Tinh toan FPS
             fps = 1.0 / (current_time - prev_time) if (current_time - prev_time) > 0 else 0
             prev_time = current_time
 
-            # Heartbeat trạng thái thiết bị
+            # Heartbeat trang thai thiet bi
             if current_time - last_heartbeat >= 15:
                 sb.heartbeat_tick()
                 last_heartbeat = current_time
 
-            # Chọn màu giao diện
+            # Chon mau giao dien
             if "WELCOME" in system_status:
-                color = (0, 255, 0)      # Xanh lá
+                color = (0, 255, 0)      # Xanh la
             elif "DENIED" in system_status or "NO FACE" in system_status:
-                color = (0, 0, 255)      # Đỏ
+                color = (0, 0, 255)      # Do
             elif "SCANNING" in system_status:
-                color = (0, 255, 255)    # Vàng
+                color = (0, 255, 255)    # Vang
             else:
-                color = (255, 255, 255)  # Trắng
+                color = (255, 255, 255)  # Trang
 
-            # Vẽ khung nhận diện động quanh mặt
+            # Ve khung nhan dien dong quanh mat
             if active_face_box is not None:
                 bx, by, bw, bh = active_face_box
                 cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), color, 2)
 
-            # Thanh trạng thái
+            # Thanh trang thai
             cv2.rectangle(frame, (0, 0), (320, 28), (0, 0, 0), -1)
             cv2.putText(frame, system_status, (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
             cv2.putText(frame, f"{fps:.1f} FPS", (250, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
 
-            # Đẩy frame lên TFT
+            # Day frame len TFT
             frame_u16 = frame.astype(np.uint16)
             b = frame_u16[:, :, 0] >> 3
             g = frame_u16[:, :, 1] >> 2
@@ -293,7 +293,7 @@ def main():
             send_data(rgb565.byteswap().tobytes())
 
     except KeyboardInterrupt:
-        print("\n>> Dừng hệ thống.")
+        print("\n>> Dung he thong.")
     finally:
         cap.release()
         spi.close()
