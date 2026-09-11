@@ -26,6 +26,8 @@ SmartLock edge device: Raspberry Pi face-recognition door lock (TFT ILI9341 + ca
 - Storage bucket `access-captures` must exist and be public; `python-multipart` is required for the supabase storage upload.
 - CHECK constraints: `access_logs.result`  in  granted/denied/no_face/unknown and `alerts.alert_type` must be a valid value -- anything else returns `23514`.
 - Main flow (main.py): grant when cosine score >= 0.40; faces smaller than `MIN_FACE_SIZE=60`px are treated as unknown; `result=unknown` when no profile or score < 0.15, `denied` otherwise. Matching takes the **max score across all templates** of a person. YuNet detection threshold is 0.65 (both main.py and registration). Cooldowns: `GRANT_COOLDOWN=5.0`, `ALERT_COOLDOWN=3.0`, heartbeat every 15s.
+- **Deletion sync (main.py)**: `sync_face_db()` prunes `face_db.npy` entries whose `face_name` no longer exists in Supabase face_profiles -- runs at startup and every 60s. Skips silently when sync is disabled/offline (`load_face_profiles()` returns `None` on disabled or network error, `{}` only on a successful empty fetch -- do not conflate them, or a network blip would wipe the whole DB). Deleting a user in the web app stops recognition on the Pi within ~60s.
+- `diag_face_db.py` (Pi-only, camera+models, no GPIO): `list` / `remove <idx>` (auto-backup `face_db.npy.bak`) / full diag: template norms, intra/cross-profile cosine, camera freeze check, live match of the person in front of the camera.
 
 ## Verification / testing
 - No test framework, lint, or typecheck config. Sanity-check with `py_compile`.

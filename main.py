@@ -92,6 +92,18 @@ def get_templates(name):
         return [feats]
     return list(feats)
 
+def sync_face_db():
+    global face_db
+    profiles = sb.load_face_profiles()
+    if profiles is None:
+        return
+    stale = [k for k in face_db if k not in profiles]
+    if stale:
+        for k in stale:
+            del face_db[k]
+        np.save("face_db.npy", face_db)
+        print(">> [Sync] Da xoa template khong con tren Supabase:", stale)
+
 def verify_face_worker(frame_input):
     global system_status, status_hold_time, is_verifying, active_face_box
     global last_access_event_time, last_grant_time
@@ -205,6 +217,7 @@ def main():
     sb.start_worker()
     sb.ensure_device()
     sb.load_face_profiles()
+    sync_face_db()
 
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
@@ -213,6 +226,7 @@ def main():
     prev_gray = None
     last_trigger_time = 0
     last_heartbeat = 0
+    last_profile_sync = 0
     prev_time = time.time()
 
     print(">> HE THONG ACCESS CONTROL DA HOAT DONG HOAN TOAN TREN TFT!")
@@ -261,6 +275,11 @@ def main():
             if current_time - last_heartbeat >= 15:
                 sb.heartbeat_tick()
                 last_heartbeat = current_time
+
+            # Dong bo xoa face_profiles tu web app (neu co)
+            if current_time - last_profile_sync >= 60:
+                sync_face_db()
+                last_profile_sync = current_time
 
             # Chon mau giao dien
             if "WELCOME" in system_status:

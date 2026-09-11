@@ -369,7 +369,7 @@ def load_face_profiles():
     global _face_profiles
     _face_profiles = {}
     if not enabled():
-        return _face_profiles
+        return None
     try:
         resp = _client().table("face_profiles").select("id, user_id, room_id, face_name").execute()
         for p in _resp_rows(resp):
@@ -381,6 +381,7 @@ def load_face_profiles():
                 }
     except Exception as exc:
         print(">> [Supabase] load_face_profiles loi:", str(exc)[:150])
+        return None
     return _face_profiles
 
 
