@@ -1,0 +1,10 @@
+[Unit]
+Description=SmartLock fina rescue - start fina when a pending command exists
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/pizero2w/edge-device/Edge-Device/venv/bin/python /home/pizero2w/edge-device/Edge-Device/fina_rescue.py
+WorkingDirectory=/home/pizero2w/edge-device/Edge-Device
+Environment=PYTHONUNBUFFERED=1

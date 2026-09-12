@@ -161,9 +161,10 @@ File `fina.service` da co san trong repo:
 
 ```bash
 cd ~/edge-device/Edge-Device && git pull
-sudo cp fina.service /etc/systemd/system/
+sudo cp fina.service fina-rescue.service fina-rescue.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now fina    # enable = tu chay khi cap nguon; --now = chay ngay
+sudo systemctl enable --now fina            # enable = tu chay khi cap nguon; --now = chay ngay
+sudo systemctl enable --now fina-rescue.timer   # moi 10s: bat lai fina khi co lenh pending tu web
 sudo systemctl status fina
 ```
 
@@ -182,7 +183,9 @@ sudo systemctl restart fina  # sau khi git pull, khoi dong lai de nap code moi
 sudo systemctl disable fina  # bo tu dong chay khi cap nguon (it khi can)
 ```
 
-> `Restart=always` trong unit: neu main.py crash thi systemd tu chay lai sau 5 giay. `SIGTERM` duoc main.py xu ly sach (set device offline + flush queue) truoc khi thoat.
+> `Type=notify` + `WatchdogSec=30` trong unit: main.py gui `READY=1` sau khoi dong va `WATCHDOG=1` moi 10s qua sd_notify raw socket; neu process tre >30s (blackhole mang, camera treo...) systemd tu kill + restart. `Restart=always`: neu main.py crash thi systemd tu chay lai sau 5 giay. `SIGTERM` duoc main.py xu ly sach (set device offline + flush queue) truoc khi thoat.
+>
+> `fina-rescue.timer` (moi 10s, chay root): khi `fina` KHONG active ma co lenh pending (restart_service/checkin/checkout/register) tu web thi tu dong `systemctl start fina` -- bam "Restart" tren UI co the cuu service dang bi **stop** (khong can SSH). Lenh `restart_service` duoc danh `done` boi rescue de tranh restart 2 lan.
 
 ---
 

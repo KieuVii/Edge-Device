@@ -1,6 +1,6 @@
 import os
 import signal
-import subprocess
+import socket
 import sys
 import time
 from threading import Thread
@@ -45,14 +45,31 @@ blank = np.zeros((240, 320, 3), dtype=np.uint8)
 _command_busy = False
 
 
-def watchdog_ping():
-    """Bao cho systemd rang process con song (WatchdogSec=30 trong fina.service)."""
-    if not os.environ.get("NOTIFY_SOCKET"):
+def _sd_notify(msg):
+    """Gui thong bao den systemd qua NOTIFY_SOCKET (sd_notify khong can thu vien).
+    Chi hoat dong khi service chay duoi systemd voi Type=notify (NOTIFY_SOCKET duoc set)."""
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
         return
+    if addr.startswith("@"):
+        addr = "\0" + addr[1:]
     try:
-        subprocess.run(["systemd-notify", "WATCHDOG=1"], timeout=3, capture_output=True)
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        sock.connect(addr)
+        sock.sendall(msg.encode())
+        sock.close()
     except Exception:
         pass
+
+
+def notify_ready():
+    """Bao systemd rang khoi dong xong (Type=notify) — khong gui se bi TimeoutStartSec kill."""
+    _sd_notify("READY=1")
+
+
+def watchdog_ping():
+    """Bao cho systemd rang process con song (WatchdogSec=30 trong fina.service)."""
+    _sd_notify("WATCHDOG=1")
 
 
 def _watchdog_loop():
@@ -289,13 +306,13 @@ def main():
     sb.load_face_profiles()
     sync_face_db()
     sb.recover_stale_commands()
+    notify_ready()
 
     last_heartbeat = 0
     last_profile_sync = 0
     last_cmd_check = 0
 
-    if os.environ.get("NOTIFY_SOCKET"):
-        Thread(target=_watchdog_loop, name="watchdog", daemon=True).start()
+    Thread(target=_watchdog_loop, name="watchdog", daemon=True).start()
 
     print(">> HE THONG SMART LOCK DA SAN SANG - doi lenh tu web (Register/Checkin/Checkout/Restart)")
 

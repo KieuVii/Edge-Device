@@ -4,12 +4,14 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+Type=notify
 ExecStart=/home/pizero2w/edge-device/Edge-Device/venv/bin/python /home/pizero2w/edge-device/Edge-Device/main.py
 WorkingDirectory=/home/pizero2w/edge-device/Edge-Device
 Restart=always
 RestartSec=5
-# Watchdog: neu main.py khong bao "con song" trong 30s (ket mang blackhole, camera treo...)
-# thi systemd tu kill + restart -> tu phuc hoi khong can SSH.
+# Watchdog (can Type=notify de systemd set NOTIFY_SOCKET): main.py gui READY=1 sau init
+# va WATCHDOG=1 moi 10s qua sd_notify raw socket. Neu process tre >30s (blackhole mang,
+# camera treo...) systemd tu kill + restart -> tu phuc hoi khong can SSH.
 WatchdogSec=30
 User=pizero2w
 Environment=PYTHONUNBUFFERED=1
