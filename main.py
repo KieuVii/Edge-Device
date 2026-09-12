@@ -280,6 +280,7 @@ def _command_worker(cmd):
 # 4. Luong chinh
 def main():
     global face_db
+    global _command_busy
     tft_ui.init_tft()
     show_idle()
 
