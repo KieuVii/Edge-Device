@@ -241,16 +241,53 @@ def handle_command(cmd):
                 msg = "Thieu face_name trong payload"
             else:
                 cap = open_camera()
-                ok, msg = registration.run_registration(face_name, cap=cap)
+                if cap is None or not cap.isOpened():
+                    sb.set_device_error()
+                    msg = "Khong mo duoc camera - kiem tra /dev/video0"
+                else:
+                    ok, msg = registration.run_registration(face_name, cap=cap)
         elif ctype in ("start_checkin", "start_checkout"):
             access_type = ctype.replace("start_", "")
             cap = open_camera()
-            ok, msg = run_verification(access_type, cap)
+            if cap is None or not cap.isOpened():
+                sb.set_device_error()
+                msg = "Khong mo duoc camera - kiem tra /dev/video0"
+            else:
+                ok, msg = run_verification(access_type, cap)
         elif ctype == "restart_service":
             sb.cancel_other_restarts(cmd_id)
             ok = True
             restart_requested = True
             msg = "Service dang khoi dong lai..."
+        elif ctype == "manual_unlock":
+            open_door_relay()
+            ok = True
+            msg = "Da mo khoa (unlock 3s)"
+        elif ctype == "lock_door":
+            RELAY_PIN.off()
+            sb.set_door_status("locked")
+            ok = True
+            msg = "Da khoa cua"
+        elif ctype == "restart_camera":
+            cap = open_camera()
+            frames_ok = 0
+            for _ in range(3):
+                ret, _frame = cap.read()
+                if ret:
+                    frames_ok += 1
+            cap.release()
+            cap = None
+            if frames_ok > 0:
+                ok = True
+                msg = f"Camera hoat dong binh thuong ({frames_ok}/3 frame)"
+            else:
+                sb.set_device_error()
+                msg = "Camera khong doc duoc frame - kiem tra /dev/video0"
+        elif ctype == "sync_face_db":
+            sync_face_db()
+            sb.load_face_profiles()
+            ok = True
+            msg = "Da dong bo face_db voi face_profiles"
         else:
             msg = f"Chua ho tro lenh: {ctype}"
     except Exception as exc:

@@ -37,7 +37,6 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
 DEVICE_CODE = os.getenv("DEVICE_CODE", "DOOR_01").strip()
 DEVICE_NAME = os.getenv("DEVICE_NAME", "SmartLock Door").strip()
 DEVICE_IP = os.getenv("DEVICE_IP", "").strip()
-ROOM_UUID = os.getenv("ROOM_UUID", "").strip()
 DRY_RUN = os.getenv("DRY_RUN", "0").strip() in ("1", "true", "True")
 
 CAPTURE_BUCKET = "access-captures"
@@ -53,6 +52,7 @@ elif DRY_RUN:
 
 _client_obj = None
 _device_id = None
+_room_id = None
 _face_profiles = {}
 _offline = False
 _stop_evt = threading.Event()
@@ -352,25 +352,33 @@ def stop_worker(timeout=8):
 
 
 def ensure_device():
-    global _device_id
+    """Tim device cua Pi theo device_code (dong device do WEB seed, kem room_id/door_id).
+    KHONG tao/sua dong device: Pi chi doc id + room_id tu DB (nguon chinh xac nhat).
+    Khong tim thay -> tra None (lenh se nam pending, khong crash)."""
+    global _device_id, _room_id
     if not enabled():
         return None
-    payload = {
-        "device_code": DEVICE_CODE,
-        "device_name": DEVICE_NAME,
-        "status": "online",
-    }
-    if ROOM_UUID:
-        payload["room_id"] = ROOM_UUID
-    if DEVICE_IP:
-        payload["ip_address"] = DEVICE_IP
-    payload["updated_at"] = _now_iso()
     try:
-        resp = _client().table("devices").upsert(payload, on_conflict="device_code").execute()
+        resp = (
+            _client()
+            .table("devices")
+            .select("id, room_id, door_id, device_code, status")
+            .eq("device_code", DEVICE_CODE)
+            .limit(1)
+            .execute()
+        )
         rows = _resp_rows(resp)
-        if rows:
-            _device_id = rows[0]["id"]
-            return _device_id
+        if not rows:
+            print(f">> [Supabase] KHONG tim thay device_code='{DEVICE_CODE}' trong bang devices.")
+            print(">>   Dong device duoc tao tu web (seed) - kiem tra .env (DEVICE_CODE=DOOR_xxx) hoac seed devices.")
+            _device_id = None
+            _room_id = None
+            return None
+        row = rows[0]
+        _device_id = row["id"]
+        _room_id = row.get("room_id")
+        print(f">> [Supabase] Device '{DEVICE_CODE}' (id={_device_id}, room_id={_room_id})")
+        return _device_id
     except Exception as exc:
         print(">> [Supabase] ensure_device loi:", str(exc)[:150])
     return None
@@ -378,6 +386,10 @@ def ensure_device():
 
 def device_id():
     return _device_id
+
+
+def room_id():
+    return _room_id
 
 
 def load_face_profiles():
@@ -439,7 +451,9 @@ def record_access(result, similarity=None, face_name=None, face_profile=None,
     if face_profile:
         payload["user_id"] = face_profile.get("user_id")
         payload["face_profile_id"] = face_profile.get("face_profile_id")
-        payload["room_id"] = face_profile.get("room_id")
+    # room_id = phong cua DEVICE (contract web: map phong bang device.room_id),
+    # fallback phong cua profile neu device chua co room (legacy).
+    payload["room_id"] = _room_id or (face_profile.get("room_id") if face_profile else None)
     if alert:
         payload["alert"] = {k: v for k, v in alert.items() if v is not None}
     if local_image:
@@ -469,6 +483,15 @@ def set_device_offline():
     if not enabled():
         return
     _enqueue("device_state", {"status": "offline"})
+
+
+def set_device_error():
+    """Device gap loi (camera hong, GPIO...) -> status='error' de web hien thi."""
+    if DRY_RUN:
+        print("[DRY-RUN] device status=error")
+    if not enabled():
+        return
+    _enqueue("device_state", {"status": "error"})
 
 
 def find_face_profile(name):

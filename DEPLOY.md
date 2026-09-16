@@ -97,9 +97,11 @@ Noi dung mau:
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SERVICE_KEY=<publishable_key_hoac_service_role_key>
 
-# Dinh danh thiet bi (khop device_code trong bang devices)
-DEVICE_CODE=DOOR_01
-DEVICE_NAME=Main Door Pi
+# Dinh danh thiet bi: phai khop device_code do WEB seed trong bang devices
+# (DOOR_101..DOOR_302). Dong device do web tao kem room_id/door_id; Pi chi
+# doc id + room_id tu bang devices (KHONG tu tao/sua dong device).
+DEVICE_CODE=DOOR_101
+DEVICE_NAME=Raspberry Pi Door Device
 DEVICE_IP=10.198.146.113
 
 # DRY_RUN=1: chi in payload ra console, KHONG gui len Supabase (dung de test)
